@@ -17,7 +17,7 @@ jobs:
   required:
     name: App / required
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -28,10 +28,10 @@ jobs:
           node-version: '22'
           package-manager-cache: false
 
-      - name: Run deterministic engine tests and static validation
+      - name: Run unit, integration, syntax, and deployment-contract checks
         run: npm run check
 
-      - name: Smoke test the static application
+      - name: Smoke test the static browser application
         shell: bash
         run: |
           set -euo pipefail
@@ -45,8 +45,36 @@ jobs:
             sleep 0.25
           done
           grep -q "HarnessLab" /tmp/harnesslab-index.html
-          grep -q "Durable workspace" /tmp/harnesslab-index.html
+          grep -q "Provider-neutral runtime" /tmp/harnesslab-index.html
+          grep -q "No provider credentials in the browser" /tmp/harnesslab-index.html
           curl --fail --silent http://127.0.0.1:4173/engine.js > /dev/null
           curl --fail --silent http://127.0.0.1:4173/workspace-store.js > /dev/null
+          curl --fail --silent http://127.0.0.1:4173/analysis-client.js > /dev/null
+          curl --fail --silent http://127.0.0.1:4173/result-contract.js > /dev/null
           curl --fail --silent http://127.0.0.1:4173/styles.css > /dev/null
           curl --fail --silent http://127.0.0.1:4173/workspace.css > /dev/null
+          curl --fail --silent http://127.0.0.1:4173/runtime.css > /dev/null
+
+      - name: Smoke test the deterministic analysis gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          HARNESSLAB_GATEWAY_PORT=8787 HARNESSLAB_PROVIDER=deterministic npm run gateway > /tmp/harnesslab-gateway.log 2>&1 &
+          gateway_pid=$!
+          trap 'kill "$gateway_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8787/health > /tmp/harnesslab-health.json; then
+              break
+            fi
+            sleep 0.25
+          done
+          node -e "const p=require('/tmp/harnesslab-health.json'); if(p.service!=='harnesslab-gateway'||p.provider.name!=='deterministic'||!p.provider.available) process.exit(1)"
+          curl --fail --silent \
+            -H 'content-type: application/json' \
+            -H 'origin: http://127.0.0.1:4173' \
+            --data '{"requirement":"Build a bounded agent that validates data and returns evidence."}' \
+            http://127.0.0.1:8787/v1/analyze > /tmp/harnesslab-analysis.json
+          node -e "const p=require('/tmp/harnesslab-analysis.json'); if(p.provider.name!=='deterministic'||!p.result?.runId||!p.result?.evaluation) process.exit(1)"
+
+      - name: Build the non-root gateway container
+        run: docker build -f services/gateway/Dockerfile -t harnesslab-gateway:ci .
