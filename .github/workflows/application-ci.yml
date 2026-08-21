@@ -17,7 +17,7 @@ jobs:
   required:
     name: App / required
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -47,21 +47,37 @@ jobs:
           grep -q 'HarnessLab' /tmp/harnesslab-index.html
           grep -q 'id="root"' /tmp/harnesslab-index.html
           grep -q 'react@18.3.1' /tmp/harnesslab-index.html
+          grep -q 'src="./critic-console.js"' /tmp/harnesslab-index.html
           curl --fail --silent http://127.0.0.1:4173/app.js > /tmp/harnesslab-app.js
           grep -q 'ReactDomRuntime.createRoot' /tmp/harnesslab-app.js
           grep -q 'No provider keys in browser' /tmp/harnesslab-app.js
           curl --fail --silent http://127.0.0.1:4173/react-app.css > /tmp/harnesslab-react.css
           grep -q '.architecture-map' /tmp/harnesslab-react.css
+          curl --fail --silent http://127.0.0.1:4173/critic-console.js > /tmp/harnesslab-critic.js
+          grep -q 'HarnessLabCriticConsole' /tmp/harnesslab-critic.js
+          grep -q 'One worker' /tmp/harnesslab-critic.js
+          grep -q 'One provider call' /tmp/harnesslab-critic.js
+          grep -q 'No tools' /tmp/harnesslab-critic.js
+          grep -q 'No child agents' /tmp/harnesslab-critic.js
+          curl --fail --silent http://127.0.0.1:4173/critic-client.js > /tmp/harnesslab-critic-client.js
+          grep -q '/v1/critique' /tmp/harnesslab-critic-client.js
+          curl --fail --silent http://127.0.0.1:4173/critic-console.css > /tmp/harnesslab-critic.css
+          grep -q '.critic-drawer' /tmp/harnesslab-critic.css
+          curl --fail --silent http://127.0.0.1:4173/temporary-worker-contract.js > /tmp/harnesslab-worker-contract.js
+          grep -q 'callBudget must equal 1' /tmp/harnesslab-worker-contract.js
           curl --fail --silent http://127.0.0.1:4173/engine.js > /dev/null
           curl --fail --silent http://127.0.0.1:4173/workspace-store.js > /dev/null
           curl --fail --silent http://127.0.0.1:4173/analysis-client.js > /dev/null
           curl --fail --silent http://127.0.0.1:4173/result-contract.js > /dev/null
 
-      - name: Smoke test the deterministic analysis gateway
+      - name: Smoke test analysis and one deterministic temporary critic
         shell: bash
         run: |
           set -euo pipefail
-          HARNESSLAB_GATEWAY_PORT=8787 HARNESSLAB_PROVIDER=deterministic npm run gateway > /tmp/harnesslab-gateway.log 2>&1 &
+          HARNESSLAB_GATEWAY_PORT=8787 \
+          HARNESSLAB_PROVIDER=deterministic \
+          HARNESSLAB_CRITIC_TIMEOUT_MS=20000 \
+          npm run gateway > /tmp/harnesslab-gateway.log 2>&1 &
           gateway_pid=$!
           trap 'kill "$gateway_pid"' EXIT
           for attempt in {1..30}; do
@@ -70,13 +86,19 @@ jobs:
             fi
             sleep 0.25
           done
-          node -e "const p=require('/tmp/harnesslab-health.json'); if(p.service!=='harnesslab-gateway'||p.provider.name!=='deterministic'||!p.provider.available) process.exit(1)"
+          node -e "const p=require('/tmp/harnesslab-health.json'); if(p.service!=='harnesslab-gateway'||p.provider.name!=='deterministic'||!p.provider.available||p.capabilities.executeTemporaryCritic!==true||p.capabilities.maxTemporaryWorkersPerRequest!==1||p.capabilities.executeTools!==false) process.exit(1)"
           curl --fail --silent \
             -H 'content-type: application/json' \
             -H 'origin: http://127.0.0.1:4173' \
             --data '{"requirement":"Build a bounded agent that validates data and returns evidence."}' \
             http://127.0.0.1:8787/v1/analyze > /tmp/harnesslab-analysis.json
-          node -e "const p=require('/tmp/harnesslab-analysis.json'); if(p.provider.name!=='deterministic'||!p.result?.runId||!p.result?.evaluation) process.exit(1)"
+          node -e "const fs=require('fs'); const p=require('/tmp/harnesslab-analysis.json'); if(p.provider.name!=='deterministic'||!p.result?.runId||!p.result?.evaluation) process.exit(1); fs.writeFileSync('/tmp/harnesslab-critic-request.json',JSON.stringify({result:p.result}))"
+          curl --fail --silent \
+            -H 'content-type: application/json' \
+            -H 'origin: http://127.0.0.1:4173' \
+            --data-binary @/tmp/harnesslab-critic-request.json \
+            http://127.0.0.1:8787/v1/critique > /tmp/harnesslab-critique.json
+          node -e "const p=require('/tmp/harnesslab-critique.json'); const w=p.worker; if(p.provider.name!=='deterministic'||w?.status!=='completed'||w?.callBudget!==1||w?.callsUsed!==1||w?.childSpawning!==false||w?.externalActions!==false||!Array.isArray(w?.tools)||w.tools.length!==0||!p.result?.artifacts?.some(a=>a.id===w.artifactId)||!p.result?.trace?.some(t=>t.event==='temporary_agent.completed')) process.exit(1)"
 
       - name: Smoke test the disabled free-only OpenRouter gateway
         shell: bash
@@ -95,7 +117,7 @@ jobs:
             fi
             sleep 0.25
           done
-          node -e "const p=require('/tmp/harnesslab-openrouter-health.json'); if(p.service!=='harnesslab-gateway'||p.status!=='degraded'||p.provider.name!=='openrouter'||p.provider.model!=='openrouter/free'||p.provider.freeOnly!==true||p.provider.configured!==false||p.provider.available!==false) process.exit(1)"
+          node -e "const p=require('/tmp/harnesslab-openrouter-health.json'); if(p.service!=='harnesslab-gateway'||p.status!=='degraded'||p.provider.name!=='openrouter'||p.provider.model!=='openrouter/free'||p.provider.freeOnly!==true||p.provider.configured!==false||p.provider.available!==false||p.capabilities.executeTemporaryCritic!==true) process.exit(1)"
 
       - name: Build the non-root gateway container
         run: docker build -f services/gateway/Dockerfile -t harnesslab-gateway:ci .
