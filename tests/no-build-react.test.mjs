@@ -57,7 +57,7 @@ test('ships the responsive command-center visual system', () => {
   ]) {
     assert.ok(css.includes(selector), `missing visual selector ${selector}`);
   }
-  assert.match(css, /@media\s*\(max-width:\s*1040px\)/);
+  assert.match(css, /@media\s*\(max-width:\s*1024px\)/);
   assert.match(css, /@media\s*\(max-width:\s*760px\)/);
   assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length);
 });
