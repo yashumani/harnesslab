@@ -9,6 +9,7 @@
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./workspace.css">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -19,10 +20,11 @@
         <span><strong>HarnessLab</strong><small>Agent systems studio</small></span>
       </a>
       <nav class="side-nav">
-        <a class="active" href="#design"><span>01</span> Design</a>
-        <a href="#runtime"><span>02</span> Runtime</a>
-        <a href="#controls"><span>03</span> Controls</a>
-        <a href="#evidence"><span>04</span> Evidence</a>
+        <a class="active" href="#workspace"><span>01</span> Workspace</a>
+        <a href="#design"><span>02</span> Design</a>
+        <a href="#runtime"><span>03</span> Runtime</a>
+        <a href="#controls"><span>04</span> Controls</a>
+        <a href="#evidence"><span>05</span> Evidence</a>
       </nav>
       <div class="sidebar-note">
         <span class="mode-dot" aria-hidden="true"></span>
@@ -33,7 +35,7 @@
 
     <main id="main-content" class="main-content">
       <header id="top" class="topbar">
-        <div><span class="topbar-label">M0 / Deploy-first vertical slice</span><strong>Harness Architect</strong></div>
+        <div><span class="topbar-label">M0 / Durable local workspace</span><strong>Harness Architect</strong></div>
         <div id="runtime-status" class="runtime-status" data-type="success" role="status" aria-live="polite">
           <span class="status-dot" aria-hidden="true"></span><span>Demo analysis complete</span>
         </div>
@@ -49,11 +51,45 @@
           </div>
         </div>
         <article class="deploy-card">
-          <span class="deploy-kicker">First deployed contract</span>
-          <strong>Requirement → Harness plan → Temporary agents → Policy gate → Trace</strong>
-          <p>This skeleton proves the full user journey with a deterministic browser engine. Live models and workers replace the seams incrementally.</p>
-          <div class="deploy-flow" aria-label="Deploy-first flow"><span>Input</span><i></i><span>Plan</span><i></i><span>Evaluate</span><i></i><span>Trace</span></div>
+          <span class="deploy-kicker">Current deployed contract</span>
+          <strong>Project → Requirement → Harness plan → Version → Evidence</strong>
+          <p>The browser workspace now preserves immutable harness versions locally. A future API and PostgreSQL layer will replace the storage seam without changing this path.</p>
+          <div class="deploy-flow" aria-label="Deploy-first flow"><span>Project</span><i></i><span>Plan</span><i></i><span>Save</span><i></i><span>Trace</span></div>
         </article>
+      </section>
+
+      <section id="workspace" class="workspace-section content-section" aria-labelledby="workspace-title">
+        <div class="section-heading">
+          <div><span class="eyebrow">Durable workspace</span><h2 id="workspace-title">Organize harnesses into projects and immutable versions</h2></div>
+          <p>Current storage is browser-local. It is neither encrypted cloud storage nor cross-device synchronization.</p>
+        </div>
+        <div class="workspace-grid">
+          <article class="panel workspace-project-panel">
+            <div class="workspace-toolbar">
+              <label class="project-select-label" for="project-select"><span>Active project</span><select id="project-select"></select></label>
+              <div class="workspace-actions">
+                <button id="new-project-button" class="secondary-button" type="button">New project</button>
+                <button id="export-workspace-button" class="secondary-button" type="button">Export backup</button>
+              </div>
+            </div>
+            <form id="new-project-form" class="new-project-form" hidden>
+              <label for="project-name-input">Project name</label>
+              <div><input id="project-name-input" name="project-name" minlength="2" maxlength="80" autocomplete="off" required placeholder="Example: Telecom anomaly investigator"><button class="primary-button compact-button" type="submit">Create</button><button id="cancel-project-button" class="secondary-button" type="button">Cancel</button></div>
+            </form>
+            <div class="workspace-stat-grid" aria-label="Active project summary">
+              <div><span>Project</span><strong id="active-project-name"></strong></div>
+              <div><span>Saved versions</span><strong id="active-project-versions">0</strong></div>
+              <div><span>Last saved</span><strong id="active-project-saved">Not saved yet</strong></div>
+            </div>
+            <div class="persistence-row"><span id="persistence-badge" class="persistence-badge">Saved in this browser</span><p>Do not enter credentials or secrets. Exported backups may contain the full requirement text.</p></div>
+            <p id="workspace-message" class="workspace-message" role="status" aria-live="polite"></p>
+          </article>
+
+          <article class="panel workspace-history-panel">
+            <div class="history-heading"><div><span class="eyebrow">Version history</span><h2>Retained harness artifacts</h2></div><button id="save-version-button" class="primary-button compact-button" type="button" disabled>Save current version</button></div>
+            <div id="run-history" class="run-history"></div>
+          </article>
+        </div>
       </section>
 
       <section class="composer-section" aria-labelledby="composer-title">
@@ -69,7 +105,7 @@
           <div class="composer-actions">
             <button id="analyze-button" class="primary-button" type="submit"><span>Generate harness plan</span><span aria-hidden="true">→</span></button>
             <button id="reset-button" class="secondary-button" type="button">Reset example</button>
-            <p>No account, API key, or paid service is required for this slice.</p>
+            <p>No account, API key, model download, or paid service is required for this slice.</p>
           </div>
           <div id="analysis-progress" class="analysis-progress" hidden><span class="progress-spinner" aria-hidden="true"></span><span id="progress-label">Compiling the requirement…</span></div>
         </form>
