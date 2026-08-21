@@ -76,5 +76,24 @@ jobs:
             http://127.0.0.1:8787/v1/analyze > /tmp/harnesslab-analysis.json
           node -e "const p=require('/tmp/harnesslab-analysis.json'); if(p.provider.name!=='deterministic'||!p.result?.runId||!p.result?.evaluation) process.exit(1)"
 
+      - name: Smoke test the disabled free-only OpenRouter gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          HARNESSLAB_GATEWAY_PORT=8788 \
+          HARNESSLAB_PROVIDER=openrouter \
+          OPENROUTER_DEFAULT_MODEL=openrouter/free \
+          OPENROUTER_API_KEY='' \
+          npm run gateway > /tmp/harnesslab-openrouter-gateway.log 2>&1 &
+          gateway_pid=$!
+          trap 'kill "$gateway_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8788/health > /tmp/harnesslab-openrouter-health.json; then
+              break
+            fi
+            sleep 0.25
+          done
+          node -e "const p=require('/tmp/harnesslab-openrouter-health.json'); if(p.service!=='harnesslab-gateway'||p.status!=='degraded'||p.provider.name!=='openrouter'||p.provider.model!=='openrouter/free'||p.provider.freeOnly!==true||p.provider.configured!==false||p.provider.available!==false) process.exit(1)"
+
       - name: Build the non-root gateway container
         run: docker build -f services/gateway/Dockerfile -t harnesslab-gateway:ci .
