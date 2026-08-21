@@ -38,6 +38,7 @@ server.listen(config.port, config.host, () => {
     provider: provider.name,
     model: provider.model,
     liveModel: provider.liveModel,
+    freeOnly: Boolean(provider.freeOnly),
     configured: provider.configured,
     allowedOriginCount: config.allowedOrigins.length
   });
