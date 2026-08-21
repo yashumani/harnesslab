@@ -17,8 +17,11 @@ const requiredFiles = [
   'services/gateway/app.mjs',
   'services/gateway/config.mjs',
   'services/gateway/provider-registry.mjs',
+  'services/gateway/providers/architecture-guidance.mjs',
   'services/gateway/providers/deterministic.mjs',
   'services/gateway/providers/ollama.mjs',
+  'services/gateway/providers/openrouter.mjs',
+  'services/gateway/providers/provider-http.mjs',
   'services/gateway/server.mjs',
   'services/gateway/Dockerfile',
   'docs/architecture/ANALYSIS_GATEWAY.md',
@@ -40,7 +43,11 @@ const workspaceCss = await readFile('apps/web/workspace.css', 'utf8');
 const runtimeCss = await readFile('apps/web/runtime.css', 'utf8');
 const gateway = await readFile('services/gateway/app.mjs', 'utf8');
 const gatewayConfig = await readFile('services/gateway/config.mjs', 'utf8');
+const registry = await readFile('services/gateway/provider-registry.mjs', 'utf8');
+const guidance = await readFile('services/gateway/providers/architecture-guidance.mjs', 'utf8');
+const providerHttp = await readFile('services/gateway/providers/provider-http.mjs', 'utf8');
 const ollama = await readFile('services/gateway/providers/ollama.mjs', 'utf8');
+const openrouter = await readFile('services/gateway/providers/openrouter.mjs', 'utf8');
 const dockerfile = await readFile('services/gateway/Dockerfile', 'utf8');
 const deploy = await readFile('.github/workflows/deploy-pages.yml', 'utf8');
 
@@ -60,6 +67,7 @@ const requiredElementIds = [
   'results'
 ];
 
+const browserBundle = [html, app, engine, workspace, analysisClient, resultContract].join('\n');
 const checks = [
   [html.includes('src="./app.js"'), 'index must use a repository-relative app script path'],
   [html.includes('href="./styles.css"'), 'index must use the base repository-relative stylesheet path'],
@@ -69,6 +77,8 @@ const checks = [
   [html.includes('browser-local'), 'index must disclose the browser-local persistence boundary'],
   [html.includes('No provider credentials in the browser'), 'index must disclose the provider credential boundary'],
   [!html.includes('type="password"'), 'static UI must not accept provider credentials'],
+  [!browserBundle.includes('OPENROUTER_API_KEY'), 'browser assets must not reference the OpenRouter credential variable'],
+  [!browserBundle.toLowerCase().includes('authorization: bearer'), 'browser assets must not construct provider authorization'],
   [app.includes("from './engine.js'"), 'app must import the deterministic engine'],
   [app.includes("from './analysis-client.js'"), 'app must use the provider-neutral analysis client'],
   [app.includes("from './workspace-store.js'"), 'app must import the replaceable workspace store'],
@@ -84,8 +94,20 @@ const checks = [
   [gateway.includes("'/health'"), 'gateway must expose its health contract'],
   [gateway.includes("'/v1/analyze'"), 'gateway must expose its analysis contract'],
   [gateway.includes('ORIGIN_NOT_ALLOWED'), 'gateway must enforce an origin allowlist'],
+  [gateway.includes('providerResponse.model'), 'gateway must surface the actual routed model when available'],
+  [gateway.includes('freeOnly'), 'gateway must expose provider free-only policy'],
   [gatewayConfig.includes("'deterministic'"), 'gateway must default to deterministic analysis'],
-  [ollama.includes('deterministic HarnessLab controls'), 'Ollama adapter must preserve deterministic controls'],
+  [gatewayConfig.includes("'openrouter'"), 'gateway config must support the OpenRouter provider'],
+  [gatewayConfig.includes('normalizeFreeOpenRouterModel'), 'gateway config must enforce free-only OpenRouter models'],
+  [registry.includes('createOpenRouterProvider'), 'provider registry must construct the OpenRouter adapter'],
+  [guidance.includes('deterministic HarnessLab controls remain authoritative'), 'shared guidance contract must preserve deterministic controls'],
+  [providerHttp.includes('await response.text()'), 'provider timeout boundary must include complete response bodies'],
+  [ollama.includes('applyArchitectureSupplement'), 'Ollama adapter must use the shared bounded guidance contract'],
+  [openrouter.includes("https://openrouter.ai/api/v1"), 'OpenRouter adapter must use the fixed official HTTPS API origin'],
+  [openrouter.includes('openrouter/free'), 'OpenRouter adapter must support the free router'],
+  [openrouter.includes("endsWith(':free')"), 'OpenRouter adapter must enforce explicit free variants'],
+  [openrouter.includes('/chat/completions'), 'OpenRouter adapter must use the chat-completions endpoint'],
+  [openrouter.includes('/key'), 'OpenRouter adapter must validate the configured key'],
   [dockerfile.includes('USER node'), 'gateway container must run as a non-root user'],
   [deploy.includes('actions/deploy-pages@'), 'deployment workflow must use the official Pages deployment action'],
   [deploy.includes('path: apps/web'), 'deployment workflow must publish only the web artifact directory']
@@ -116,7 +138,11 @@ for (const [name, content] of [
   ['runtime-css', runtimeCss],
   ['gateway', gateway],
   ['gateway-config', gatewayConfig],
+  ['registry', registry],
+  ['guidance', guidance],
+  ['provider-http', providerHttp],
   ['ollama', ollama],
+  ['openrouter', openrouter],
   ['dockerfile', dockerfile],
   ['deploy', deploy]
 ]) {
