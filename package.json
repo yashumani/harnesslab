@@ -1,14 +1,16 @@
 {
   "name": "harnesslab",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "type": "module",
   "description": "Deploy-first AI agent harness builder and adaptive temporary-agent runtime.",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "validate": "node scripts/validate-static.mjs",
-    "check": "npm run test && npm run validate",
-    "serve": "python3 -m http.server 4173 --directory apps/web"
+    "check:syntax": "node --check apps/web/app.js && node --check apps/web/analysis-client.js && node --check apps/web/result-contract.js && node --check services/gateway/app.mjs && node --check services/gateway/config.mjs && node --check services/gateway/errors.mjs && node --check services/gateway/provider-registry.mjs && node --check services/gateway/providers/deterministic.mjs && node --check services/gateway/providers/ollama.mjs && node --check services/gateway/server.mjs",
+    "check": "npm run check:syntax && npm run test && npm run validate",
+    "serve": "python3 -m http.server 4173 --directory apps/web",
+    "gateway": "node services/gateway/server.mjs"
   },
   "engines": {
     "node": ">=22"
