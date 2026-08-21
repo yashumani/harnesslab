@@ -189,9 +189,11 @@ class HarnessLabCriticConsole extends HTMLElement {
   saveReviewedVersion() {
     if (!this.reviewedResult) return;
     try {
-      const run = this.workspaceStore.saveRun(this.reviewedResult, {
+      const freshWorkspaceStore = createWorkspaceStore({ storage: this.storage });
+      const run = freshWorkspaceStore.saveRun(this.reviewedResult, {
         requirement: this.reviewedResult.requirement
       });
+      this.workspaceStore = freshWorkspaceStore;
       this.message = `Reviewed result saved as local project version ${run.version}. Reloading the main workspace will refresh its history view.`;
       this.messageType = 'success';
     } catch (error) {
