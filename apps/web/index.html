@@ -10,6 +10,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./workspace.css">
+  <link rel="stylesheet" href="./runtime.css">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -21,23 +22,24 @@
       </a>
       <nav class="side-nav">
         <a class="active" href="#workspace"><span>01</span> Workspace</a>
-        <a href="#design"><span>02</span> Design</a>
-        <a href="#runtime"><span>03</span> Runtime</a>
-        <a href="#controls"><span>04</span> Controls</a>
-        <a href="#evidence"><span>05</span> Evidence</a>
+        <a href="#model-runtime"><span>02</span> Model gateway</a>
+        <a href="#design"><span>03</span> Design</a>
+        <a href="#runtime"><span>04</span> Execution</a>
+        <a href="#controls"><span>05</span> Controls</a>
+        <a href="#evidence"><span>06</span> Evidence</a>
       </nav>
       <div class="sidebar-note">
         <span class="mode-dot" aria-hidden="true"></span>
-        <div><strong>Deploy-first demo</strong><p>No live model, tool, MCP, or A2A execution yet.</p></div>
+        <div><strong>Provider-neutral runtime</strong><p>Browser fallback always works. Live Ollama requires your own configured gateway.</p></div>
       </div>
       <p class="sidebar-principle">Agents are disposable.<br>Harnesses are durable.</p>
     </aside>
 
     <main id="main-content" class="main-content">
       <header id="top" class="topbar">
-        <div><span class="topbar-label">M0 / Durable local workspace</span><strong>Harness Architect</strong></div>
+        <div><span class="topbar-label">M0 / Provider-neutral analysis</span><strong>Harness Architect</strong></div>
         <div id="runtime-status" class="runtime-status" data-type="success" role="status" aria-live="polite">
-          <span class="status-dot" aria-hidden="true"></span><span>Demo analysis complete</span>
+          <span class="status-dot" aria-hidden="true"></span><span>Browser analysis ready</span>
         </div>
       </header>
 
@@ -52,9 +54,9 @@
         </div>
         <article class="deploy-card">
           <span class="deploy-kicker">Current deployed contract</span>
-          <strong>Project → Requirement → Harness plan → Version → Evidence</strong>
-          <p>The browser workspace now preserves immutable harness versions locally. A future API and PostgreSQL layer will replace the storage seam without changing this path.</p>
-          <div class="deploy-flow" aria-label="Deploy-first flow"><span>Project</span><i></i><span>Plan</span><i></i><span>Save</span><i></i><span>Trace</span></div>
+          <strong>Project → Runtime → Harness plan → Version → Evidence</strong>
+          <p>The browser remains fully functional without a server. A compatible gateway can now replace only the analysis seam while projects, controls, artifacts, versions, and rendering stay stable.</p>
+          <div class="deploy-flow" aria-label="Deploy-first flow"><span>Project</span><i></i><span>Runtime</span><i></i><span>Plan</span><i></i><span>Evidence</span></div>
         </article>
       </section>
 
@@ -92,11 +94,34 @@
         </div>
       </section>
 
+      <section id="model-runtime" class="runtime-settings-section content-section" aria-labelledby="model-runtime-title">
+        <div class="section-heading">
+          <div><span class="eyebrow">Analysis runtime</span><h2 id="model-runtime-title">Choose how the harness plan is produced</h2></div>
+          <p>The browser never accepts model-provider keys. Hosted or local providers stay behind a separately configured HarnessLab gateway.</p>
+        </div>
+        <article class="panel runtime-settings-card">
+          <div class="runtime-config-grid">
+            <label class="runtime-field" for="analysis-mode-select"><span>Analysis mode</span><select id="analysis-mode-select">
+              <option value="browser">Browser deterministic — always available</option>
+              <option value="automatic">Automatic — gateway then recorded fallback</option>
+              <option value="gateway">Gateway required — no silent fallback</option>
+            </select></label>
+            <label class="runtime-field" for="gateway-url-input"><span>HarnessLab gateway URL</span><input id="gateway-url-input" type="url" inputmode="url" autocomplete="url" spellcheck="false" value="http://127.0.0.1:8787" aria-describedby="gateway-url-help"></label>
+            <button id="test-gateway-button" class="secondary-button compact-button" type="button">Test connection</button>
+          </div>
+          <div class="runtime-health-row">
+            <span id="gateway-health-badge" class="gateway-health-badge" data-state="neutral">Not checked</span>
+            <p id="gateway-health-message" role="status" aria-live="polite">Browser deterministic mode is active. Start the local gateway only when you want server-side deterministic or Ollama-assisted analysis.</p>
+          </div>
+          <div class="runtime-boundary" id="gateway-url-help"><span aria-hidden="true">⌁</span><div><strong>No provider credentials in the browser</strong><p>The gateway URL and mode are the only runtime settings retained locally. Ollama configuration belongs in the gateway environment; use HTTPS for a hosted gateway.</p></div></div>
+        </article>
+      </section>
+
       <section class="composer-section" aria-labelledby="composer-title">
         <form id="requirement-form" class="composer-card">
           <div class="section-heading compact">
             <div><span class="eyebrow">Requirement intake</span><h2 id="composer-title">What should the agent system accomplish?</h2></div>
-            <span class="demo-badge">Deterministic demo</span>
+            <span id="analysis-mode-badge" class="demo-badge">Browser deterministic</span>
           </div>
           <label class="sr-only" for="requirement-input">Agent requirement</label>
           <textarea id="requirement-input" rows="6" minlength="8" maxlength="1600" spellcheck="true" placeholder="Example: Build an agent that investigates KPI anomalies, validates data quality, queries approved systems, and produces an evidence-backed report."></textarea>
@@ -105,7 +130,7 @@
           <div class="composer-actions">
             <button id="analyze-button" class="primary-button" type="submit"><span>Generate harness plan</span><span aria-hidden="true">→</span></button>
             <button id="reset-button" class="secondary-button" type="button">Reset example</button>
-            <p>No account, API key, model download, or paid service is required for this slice.</p>
+            <p>Browser mode needs no account, key, model download, or paid service.</p>
           </div>
           <div id="analysis-progress" class="analysis-progress" hidden><span class="progress-spinner" aria-hidden="true"></span><span id="progress-label">Compiling the requirement…</span></div>
         </form>
@@ -114,9 +139,18 @@
       <div id="results" class="results" hidden aria-busy="false">
         <section class="result-header" aria-labelledby="result-title">
           <div><span class="eyebrow">Generated harness blueprint</span><h2 id="result-title">A deployable planning contract—not a prompt dump.</h2></div>
-          <span id="run-badge" class="run-badge">DEMO</span>
+          <div class="result-badge-group"><span id="result-runtime-badge" class="result-runtime-badge" data-source="browser">Browser · deterministic</span><span id="run-badge" class="run-badge">DEMO</span></div>
         </section>
-        <section class="metric-section" aria-label="Harness metrics"><div id="metric-grid" class="metric-grid"></div></section>
+        <section class="metric-section" aria-label="Harness metrics">
+          <div id="metric-grid" class="metric-grid"></div>
+          <div class="runtime-provenance" aria-label="Analysis provenance">
+            <div><span>Source</span><strong id="runtime-source-value">browser</strong></div>
+            <div><span>Provider</span><strong id="runtime-provider-value">deterministic</strong></div>
+            <div><span>Model</span><strong id="runtime-model-value">none</strong></div>
+            <div><span>Latency</span><strong id="runtime-latency-value">0 ms</strong></div>
+            <div><span>Fallback</span><strong id="runtime-fallback-value">no</strong></div>
+          </div>
+        </section>
 
         <section class="overview-grid">
           <article class="panel architecture-summary">
@@ -182,11 +216,11 @@
         <section id="evidence" class="content-section" aria-labelledby="evidence-title">
           <div class="section-heading">
             <div><span class="eyebrow">Evidence and observability</span><h2 id="evidence-title">Every decision leaves a trace</h2></div>
-            <p>Later releases replace simulated events with live model, tool, worker, cost, and latency telemetry.</p>
+            <p>Browser fallback and gateway execution both record provenance; later workers add tool, cost, and artifact telemetry.</p>
           </div>
           <div class="evidence-grid">
             <article class="panel trace-panel">
-              <div class="panel-heading compact-heading"><div><span class="eyebrow">Execution trace</span><h2>Deterministic demo events</h2></div></div>
+              <div class="panel-heading compact-heading"><div><span class="eyebrow">Execution trace</span><h2>Validated planning events</h2></div></div>
               <div id="trace-list" class="trace-list"></div>
             </article>
             <article class="panel evaluation-panel">
@@ -195,8 +229,8 @@
             </article>
           </div>
           <details class="json-panel">
-            <summary><span><strong>Structured harness JSON</strong><small>Contract consumed by the future API, worker runtime, and evaluator.</small></span><span aria-hidden="true">⌄</span></summary>
-            <div class="json-toolbar"><span>Read-only demo artifact</span><button id="copy-json" type="button">Copy JSON</button></div>
+            <summary><span><strong>Structured harness JSON</strong><small>Validated contract consumed by the workspace, gateway, future worker runtime, and evaluator.</small></span><span aria-hidden="true">⌄</span></summary>
+            <div class="json-toolbar"><span>Read-only validated artifact</span><button id="copy-json" type="button">Copy JSON</button></div>
             <pre><code id="json-output"></code></pre>
           </details>
         </section>
