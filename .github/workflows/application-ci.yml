@@ -1,0 +1,49 @@
+name: Application CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: application-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  required:
+    name: App / required
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Run deterministic engine tests and static validation
+        run: npm run check
+
+      - name: Smoke test the static application
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --directory apps/web > /tmp/harnesslab-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /tmp/harnesslab-index.html; then
+              break
+            fi
+            sleep 0.25
+          done
+          grep -q "HarnessLab" /tmp/harnesslab-index.html
+          curl --fail --silent http://127.0.0.1:4173/engine.js > /dev/null
+          curl --fail --silent http://127.0.0.1:4173/styles.css > /dev/null

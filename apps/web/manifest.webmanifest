@@ -1,0 +1,17 @@
+{
+  "name": "HarnessLab",
+  "short_name": "HarnessLab",
+  "description": "Deploy-first agent harness architecture studio.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#050a12",
+  "theme_color": "#07111f",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
