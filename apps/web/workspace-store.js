@@ -26,17 +26,24 @@ function makeDefaultId() {
 function validateStoredRun(run) {
   return isRecord(run)
     && typeof run.id === 'string'
+    && run.id.length > 0
     && Number.isInteger(run.version)
     && run.version > 0
     && typeof run.savedAt === 'string'
     && typeof run.requirement === 'string'
+    && typeof run.runId === 'string'
+    && typeof run.architecture === 'string'
+    && (run.score === null || Number.isFinite(run.score))
     && isRecord(run.result);
 }
 
 function validateStoredProject(project) {
   return isRecord(project)
     && typeof project.id === 'string'
+    && project.id.length > 0
     && typeof project.name === 'string'
+    && project.name.trim().length >= 2
+    && project.name.length <= 80
     && typeof project.createdAt === 'string'
     && typeof project.updatedAt === 'string'
     && Array.isArray(project.runs)
