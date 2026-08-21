@@ -1,4 +1,12 @@
 import { analyzeRequirement, examples } from './engine.js';
+import {
+  AnalysisGatewayError,
+  createAnalysisClient,
+  loadRuntimeSettings,
+  normalizeGatewayUrl,
+  RuntimeModes,
+  saveRuntimeSettings
+} from './analysis-client.js';
 import { createWorkspaceStore } from './workspace-store.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -14,6 +22,7 @@ const errorMessage = $('#form-error');
 const copyButton = $('#copy-json');
 const jsonOutput = $('#json-output');
 const runBadge = $('#run-badge');
+const resultRuntimeBadge = $('#result-runtime-badge');
 const projectSelect = $('#project-select');
 const newProjectButton = $('#new-project-button');
 const newProjectForm = $('#new-project-form');
@@ -27,13 +36,29 @@ const projectVersionValue = $('#active-project-versions');
 const projectSavedValue = $('#active-project-saved');
 const persistenceBadge = $('#persistence-badge');
 const workspaceMessage = $('#workspace-message');
+const analysisModeSelect = $('#analysis-mode-select');
+const gatewayUrlInput = $('#gateway-url-input');
+const testGatewayButton = $('#test-gateway-button');
+const gatewayHealthBadge = $('#gateway-health-badge');
+const gatewayHealthMessage = $('#gateway-health-message');
+const analysisModeBadge = $('#analysis-mode-badge');
+
+const MODE_LABELS = Object.freeze({
+  [RuntimeModes.BROWSER]: 'Browser deterministic',
+  [RuntimeModes.AUTOMATIC]: 'Automatic fallback',
+  [RuntimeModes.GATEWAY]: 'Gateway required'
+});
+
 let browserStorage = null;
 try {
   browserStorage = window.localStorage;
 } catch {
   browserStorage = null;
 }
+
 const workspaceStore = createWorkspaceStore({ storage: browserStorage });
+const analysisClient = createAnalysisClient({ fallbackAnalyze: analyzeRequirement });
+let runtimeSettings = loadRuntimeSettings(browserStorage);
 let latestResult = null;
 
 function createElement(tag, className, text) {
@@ -58,6 +83,12 @@ function setWorkspaceMessage(message, type = 'neutral') {
   workspaceMessage.dataset.type = type;
 }
 
+function setGatewayHealth(state, label, message) {
+  gatewayHealthBadge.dataset.state = state;
+  gatewayHealthBadge.textContent = label;
+  gatewayHealthMessage.textContent = message;
+}
+
 function formatTimestamp(value) {
   if (!value) return 'Not saved yet';
   const date = new Date(value);
@@ -70,6 +101,23 @@ function formatTimestamp(value) {
 
 function fileSafeName(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'workspace';
+}
+
+function captureRuntimeSettings() {
+  const gatewayUrl = normalizeGatewayUrl(gatewayUrlInput.value);
+  runtimeSettings = saveRuntimeSettings(browserStorage, {
+    mode: analysisModeSelect.value,
+    gatewayUrl,
+    timeoutMs: runtimeSettings.timeoutMs
+  });
+  renderRuntimeSettings();
+  return runtimeSettings;
+}
+
+function renderRuntimeSettings() {
+  analysisModeSelect.value = runtimeSettings.mode;
+  gatewayUrlInput.value = runtimeSettings.gatewayUrl;
+  analysisModeBadge.textContent = MODE_LABELS[runtimeSettings.mode] ?? 'Provider-neutral';
 }
 
 function renderExamples() {
@@ -112,6 +160,39 @@ function renderMetrics(result) {
   });
 }
 
+function renderRuntimeProvenance(result) {
+  const runtime = result.runtime ?? {
+    source: 'saved',
+    provider: 'legacy deterministic',
+    model: null,
+    latencyMs: 0,
+    fallbackUsed: false,
+    fallbackReason: null
+  };
+  $('#runtime-source-value').textContent = runtime.source;
+  $('#runtime-provider-value').textContent = runtime.provider;
+  $('#runtime-model-value').textContent = runtime.model || 'none';
+  $('#runtime-latency-value').textContent = `${Math.max(0, Math.round(runtime.latencyMs || 0))} ms`;
+  $('#runtime-fallback-value').textContent = runtime.fallbackUsed
+    ? `yes · ${runtime.fallbackReason || 'recorded'}`
+    : 'no';
+
+  if (runtime.fallbackUsed) {
+    resultRuntimeBadge.dataset.source = 'fallback';
+    resultRuntimeBadge.textContent = 'Browser fallback · deterministic';
+  } else if (runtime.source === 'gateway') {
+    resultRuntimeBadge.dataset.source = 'gateway';
+    resultRuntimeBadge.textContent = runtime.model
+      ? `${runtime.provider} · ${runtime.model}`
+      : `Gateway · ${runtime.provider}`;
+  } else {
+    resultRuntimeBadge.dataset.source = 'browser';
+    resultRuntimeBadge.textContent = runtime.source === 'saved'
+      ? 'Saved deterministic artifact'
+      : 'Browser · deterministic';
+  }
+}
+
 function renderOverview(result) {
   $('#result-requirement').textContent = result.requirement;
   $('#architecture-kind').textContent = result.architecture.kind;
@@ -127,7 +208,7 @@ function renderOverview(result) {
 
   const questions = $('#question-list');
   clear(questions);
-  const items = result.unresolvedQuestions.length ? result.unresolvedQuestions : ['No material requirement gaps detected in this demo pass.'];
+  const items = result.unresolvedQuestions.length ? result.unresolvedQuestions : ['No material requirement gaps detected in this pass.'];
   items.forEach((question) => questions.appendChild(createElement('li', '', question)));
 }
 
@@ -268,6 +349,7 @@ function renderEvaluation(result) {
 function renderResult(result, { restored = false } = {}) {
   latestResult = result;
   renderMetrics(result);
+  renderRuntimeProvenance(result);
   renderOverview(result);
   renderStages(result);
   renderProtocols(result);
@@ -282,7 +364,11 @@ function renderResult(result, { restored = false } = {}) {
   results.hidden = false;
   saveVersionButton.disabled = false;
   saveVersionButton.textContent = restored ? 'Save restored run as new version' : 'Save current version';
-  setStatus(restored ? 'Saved harness version restored' : 'Demo analysis complete', 'success');
+
+  if (restored) setStatus('Saved harness version restored', 'success');
+  else if (result.runtime?.fallbackUsed) setStatus('Gateway unavailable; browser fallback complete', 'success');
+  else if (result.runtime?.source === 'gateway') setStatus('Gateway analysis complete', 'success');
+  else setStatus('Browser analysis complete', 'success');
 }
 
 function renderWorkspace() {
@@ -346,38 +432,53 @@ function renderWorkspace() {
   });
 }
 
-async function simulateAnalysis(requirement) {
-  const phases = ['Compiling the requirement…', 'Selecting the harness topology…', 'Planning bounded temporary agents…', 'Applying policy and evaluation gates…'];
+async function executeAnalysis(requirement) {
+  const phases = runtimeSettings.mode === RuntimeModes.BROWSER
+    ? ['Compiling the requirement…', 'Selecting the harness topology…', 'Applying policy and evaluation gates…']
+    : ['Compiling the requirement…', 'Contacting the configured gateway…', 'Validating the returned harness contract…'];
   analyzeButton.disabled = true;
   resetButton.disabled = true;
   progress.hidden = false;
   results.setAttribute('aria-busy', 'true');
-  setStatus('Demo analysis running', 'active');
+  setStatus('Analysis running', 'active');
+
   for (const phase of phases) {
     progressLabel.textContent = phase;
-    await new Promise((resolve) => window.setTimeout(resolve, 120));
+    await new Promise((resolve) => window.setTimeout(resolve, 90));
   }
-  renderResult(analyzeRequirement(requirement));
+
+  const result = await analysisClient.analyze(requirement, runtimeSettings);
+  renderResult(result);
   progress.hidden = true;
   analyzeButton.disabled = false;
   resetButton.disabled = false;
   results.setAttribute('aria-busy', 'false');
-  setWorkspaceMessage('Plan generated. Save it when it represents a meaningful harness version.', 'neutral');
+
+  if (result.runtime?.fallbackUsed) {
+    setWorkspaceMessage('Gateway analysis failed validation or availability checks. The deterministic fallback was used and recorded.', 'neutral');
+  } else if (result.runtime?.source === 'gateway') {
+    setWorkspaceMessage(`Plan produced through the ${result.runtime.provider} gateway and validated before rendering.`, 'success');
+  } else {
+    setWorkspaceMessage('Plan generated in the browser. Save it when it represents a meaningful harness version.', 'neutral');
+  }
 }
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   errorMessage.textContent = '';
   try {
-    await simulateAnalysis(input.value);
+    captureRuntimeSettings();
+    await executeAnalysis(input.value);
     results.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
-    errorMessage.textContent = error instanceof Error ? error.message : 'Unable to analyze the requirement.';
+    errorMessage.textContent = error instanceof AnalysisGatewayError
+      ? `${error.message} (${error.code})`
+      : error instanceof Error ? error.message : 'Unable to analyze the requirement.';
     analyzeButton.disabled = false;
     resetButton.disabled = false;
     progress.hidden = true;
     results.setAttribute('aria-busy', 'false');
-    setStatus('Requirement needs attention', 'error');
+    setStatus(error instanceof AnalysisGatewayError ? 'Gateway analysis failed' : 'Requirement needs attention', 'error');
     input.focus();
   }
 });
@@ -396,6 +497,49 @@ copyButton.addEventListener('click', async () => {
     window.setTimeout(() => { copyButton.textContent = 'Copy JSON'; }, 1400);
   } catch {
     copyButton.textContent = 'Copy unavailable';
+  }
+});
+
+analysisModeSelect.addEventListener('change', () => {
+  try {
+    captureRuntimeSettings();
+    setGatewayHealth(
+      'neutral',
+      'Not checked',
+      runtimeSettings.mode === RuntimeModes.BROWSER
+        ? 'Browser deterministic mode is active; no gateway request will be made.'
+        : 'Test the gateway before depending on live or server-side analysis.'
+    );
+  } catch (error) {
+    setGatewayHealth('error', 'Invalid URL', error instanceof Error ? error.message : 'Invalid gateway setting.');
+  }
+});
+
+gatewayUrlInput.addEventListener('change', () => {
+  try {
+    captureRuntimeSettings();
+    setGatewayHealth('neutral', 'Not checked', 'Gateway setting saved locally. Test the connection before using gateway-required mode.');
+  } catch (error) {
+    setGatewayHealth('error', 'Invalid URL', error instanceof Error ? error.message : 'Invalid gateway URL.');
+  }
+});
+
+testGatewayButton.addEventListener('click', async () => {
+  testGatewayButton.disabled = true;
+  setGatewayHealth('checking', 'Checking', 'Contacting the configured HarnessLab gateway…');
+  try {
+    const settings = captureRuntimeSettings();
+    const health = await analysisClient.checkHealth(settings);
+    if (health.provider.available) {
+      const model = health.provider.model ? ` · ${health.provider.model}` : '';
+      setGatewayHealth('ok', 'Available', `${health.provider.name}${model} is configured and available. Live model: ${health.provider.liveModel ? 'yes' : 'no'}.`);
+    } else {
+      setGatewayHealth('degraded', 'Degraded', `${health.provider.name} gateway is reachable, but its configured provider is not available.`);
+    }
+  } catch (error) {
+    setGatewayHealth('error', 'Unavailable', error instanceof Error ? error.message : 'Gateway health check failed.');
+  } finally {
+    testGatewayButton.disabled = false;
   }
 });
 
@@ -475,8 +619,20 @@ exportWorkspaceButton.addEventListener('click', () => {
   }
 });
 
-renderExamples();
-renderWorkspace();
-input.value = examples[0].value;
-renderResult(analyzeRequirement(input.value));
-setWorkspaceMessage('The sample plan is not saved yet. Browser projects are local, not encrypted cloud storage.', 'neutral');
+async function initialize() {
+  renderExamples();
+  renderWorkspace();
+  renderRuntimeSettings();
+  input.value = examples[0].value;
+  const initialResult = await analysisClient.analyze(input.value, {
+    ...runtimeSettings,
+    mode: RuntimeModes.BROWSER
+  });
+  renderResult(initialResult);
+  setWorkspaceMessage('The sample plan is not saved yet. Browser projects are local, not encrypted cloud storage.', 'neutral');
+}
+
+initialize().catch((error) => {
+  errorMessage.textContent = error instanceof Error ? error.message : 'HarnessLab could not initialize.';
+  setStatus('Initialization failed', 'error');
+});
