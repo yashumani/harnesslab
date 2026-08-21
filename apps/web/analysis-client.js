@@ -57,7 +57,7 @@ export function normalizeGatewayUrl(value) {
   return url.toString().replace(/\/$/, '');
 }
 
-export function normalizeRuntimeSettings(value = {}) {
+export function normalizeRuntimeSettings(value = {}, { strictGatewayUrl = false } = {}) {
   const candidate = isRecord(value) ? value : {};
   const mode = Object.values(RuntimeModes).includes(candidate.mode)
     ? candidate.mode
@@ -69,7 +69,8 @@ export function normalizeRuntimeSettings(value = {}) {
   let gatewayUrl = DEFAULT_RUNTIME_SETTINGS.gatewayUrl;
   try {
     gatewayUrl = normalizeGatewayUrl(candidate.gatewayUrl ?? gatewayUrl);
-  } catch {
+  } catch (error) {
+    if (strictGatewayUrl) throw error;
     gatewayUrl = DEFAULT_RUNTIME_SETTINGS.gatewayUrl;
   }
   return { mode, gatewayUrl, timeoutMs };
@@ -86,7 +87,7 @@ export function loadRuntimeSettings(storage = null) {
 }
 
 export function saveRuntimeSettings(storage, settings) {
-  const normalized = normalizeRuntimeSettings(settings);
+  const normalized = normalizeRuntimeSettings(settings, { strictGatewayUrl: true });
   if (storage) {
     try {
       storage.setItem(ANALYSIS_RUNTIME_STORAGE_KEY, JSON.stringify(normalized));
@@ -141,14 +142,23 @@ function attachRuntime(result, runtime) {
 
 async function fetchJson(fetchImpl, url, options, timeoutMs) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let response;
+  const timer = setTimeout(() => controller.abort(new Error('gateway timeout')), timeoutMs);
+  let response = null;
+  let text;
   try {
     response = await fetchImpl(url, { ...options, signal: controller.signal });
+    text = await response.text();
   } catch (cause) {
     if (controller.signal.aborted) {
-      throw new AnalysisGatewayError(`Gateway did not respond within ${timeoutMs} ms.`, {
+      throw new AnalysisGatewayError(`Gateway did not complete within ${timeoutMs} ms.`, {
         code: 'GATEWAY_TIMEOUT',
+        cause
+      });
+    }
+    if (response) {
+      throw new AnalysisGatewayError('Unable to read the gateway response.', {
+        code: 'GATEWAY_RESPONSE_ERROR',
+        status: response.status,
         cause
       });
     }
@@ -160,16 +170,6 @@ async function fetchJson(fetchImpl, url, options, timeoutMs) {
     clearTimeout(timer);
   }
 
-  let text;
-  try {
-    text = await response.text();
-  } catch (cause) {
-    throw new AnalysisGatewayError('Unable to read the gateway response.', {
-      code: 'GATEWAY_RESPONSE_ERROR',
-      status: response.status,
-      cause
-    });
-  }
   if (text.length > MAX_RESPONSE_BYTES) {
     throw new AnalysisGatewayError('Gateway response exceeded the allowed size.', {
       code: 'GATEWAY_RESPONSE_TOO_LARGE',
@@ -275,7 +275,12 @@ export function createAnalysisClient({
     if (typeof requirement !== 'string' || requirement.trim().length < 8) {
       throw new Error('Describe the agent use case in at least 8 characters.');
     }
-    const settings = normalizeRuntimeSettings(inputSettings);
+    const candidateMode = isRecord(inputSettings) && Object.values(RuntimeModes).includes(inputSettings.mode)
+      ? inputSettings.mode
+      : DEFAULT_RUNTIME_SETTINGS.mode;
+    const settings = normalizeRuntimeSettings(inputSettings, {
+      strictGatewayUrl: candidateMode !== RuntimeModes.BROWSER
+    });
     if (settings.mode === RuntimeModes.BROWSER) return browserAnalysis(requirement, settings);
 
     try {
@@ -292,7 +297,7 @@ export function createAnalysisClient({
   }
 
   async function checkHealth(inputSettings = {}) {
-    const settings = normalizeRuntimeSettings(inputSettings);
+    const settings = normalizeRuntimeSettings(inputSettings, { strictGatewayUrl: true });
     const gatewayUrl = normalizeGatewayUrl(settings.gatewayUrl);
     const payload = await fetchJson(fetchImpl, `${gatewayUrl}/health`, {
       method: 'GET',
