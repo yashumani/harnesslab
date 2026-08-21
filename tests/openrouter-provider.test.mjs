@@ -87,7 +87,7 @@ test('health validates the key only against the fixed official endpoint', async 
   assert.equal(requests[0].options.method, 'GET');
   assert.equal(requests[0].options.headers.authorization, 'Bearer unit-test-key');
   assert.equal(requests[0].options.headers['http-referer'], 'https://example.test/harnesslab');
-  assert.equal(requests[0].options.headers['x-title'], 'HarnessLab Unit Test');
+  assert.equal(requests[0].options.headers['x-openrouter-title'], 'HarnessLab Unit Test');
   assert.equal(JSON.stringify(health).includes('unit-test-key'), false);
   assert.equal(JSON.stringify(health).includes('must-not-be-returned'), false);
 });
