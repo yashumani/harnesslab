@@ -6,7 +6,7 @@ HarnessLab is an AI-assisted agent harness builder and adaptive swarm runtime fo
 
 ## Current deployed slice
 
-HarnessLab follows a **deploy-first development cycle**. The first slice is a responsive static application that accepts an agent-use-case requirement and returns a deterministic harness blueprint containing:
+HarnessLab follows a **deploy-first development cycle**. The deployed static application accepts an agent-use-case requirement and returns a deterministic harness blueprint containing:
 
 - requirement interpretation and architecture selection;
 - workflow, single-agent, or temporary-subagent guidance;
@@ -16,7 +16,9 @@ HarnessLab follows a **deploy-first development cycle**. The first slice is a re
 - structured artifact identifiers;
 - an execution trace and evaluation summary.
 
-The current slice is deliberately labeled as a deterministic demonstration. It does not execute a live model, MCP server, A2A peer, external tool, or remote worker. Those seams will be replaced incrementally without breaking the deployed user path.
+The second vertical slice adds a versioned browser workspace. Users can create projects, save immutable harness-plan versions, reopen earlier versions, and export a JSON backup. The storage adapter is intentionally isolated so a later control-plane API and PostgreSQL database can replace it without changing the user path.
+
+The current slice is deliberately labeled as a deterministic demonstration. It does not execute a live model, MCP server, A2A peer, external tool, or remote worker. Browser project data is local to the current browser profile and must not be described as encrypted cloud storage or cross-device synchronization.
 
 Expected deployment after GitHub Pages is configured for GitHub Actions:
 
@@ -51,7 +53,22 @@ npm test
 npm run validate
 ```
 
-The test suite verifies deterministic behavior, simple-versus-complex routing, temporary-agent limits, approval gates, A2A decisions, artifacts, trace completeness, and the explicit no-live-execution boundary.
+The tests cover deterministic architecture routing, temporary-agent limits, approval gates, A2A decisions, artifact and trace contracts, workspace schema recovery, project selection, immutable version history, local persistence, storage failure fallback, retention limits, and backup export.
+
+## Browser workspace boundary
+
+Harness projects currently use a versioned `localStorage` adapter:
+
+```text
+Project
+  → requirement
+  → generated harness result
+  → immutable saved version
+  → local version history
+  → optional JSON backup
+```
+
+Do not enter credentials, API keys, production data, or secrets. Exported backups can contain the full requirement text and should be handled as private files.
 
 ## Deploy
 
@@ -93,6 +110,6 @@ HarnessLab will provide:
 
 ## Repository status
 
-Repository governance, security boundaries, issue forms, architecture baselines, deploy-first CI, and the first interactive skeleton are under active development through pull requests.
+Repository governance, security boundaries, issue forms, architecture baselines, deploy-first CI, the interactive skeleton, and durable local project versions are developed through pull requests.
 
 No open-source license has been selected yet. Do not assume permission to copy, modify, or redistribute this repository's contents.
