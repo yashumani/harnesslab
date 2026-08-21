@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { assertHarnessResult, HarnessResultValidationError } from '../../apps/web/result-contract.js';
+import { assertTemporaryWorker, TemporaryWorkerValidationError } from '../../apps/web/temporary-worker-contract.js';
 import {
   GatewayError,
   ProviderTimeoutError,
   RequestValidationError
 } from './errors.mjs';
+import {
+  applyTemporaryCriticOutcome,
+  compileCriticContext
+} from './temporary-critic.mjs';
 
 const NOOP_LOGGER = Object.freeze({
   info() {},
@@ -15,6 +20,11 @@ const NOOP_LOGGER = Object.freeze({
 
 function elapsedMs(startedAt, now) {
   return Math.max(0, Math.round(now() - startedAt));
+}
+
+function isoTimestamp(value) {
+  const date = new Date(Number.isFinite(value) ? value : Date.now());
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
 function safeReason(value) {
@@ -117,29 +127,70 @@ function validateAnalyzeRequest(payload) {
   return requirement;
 }
 
-async function runProviderWithTimeout(provider, requirement, timeoutMs) {
+function validateCriticRequest(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new RequestValidationError('Request body must be a JSON object.');
+  }
+  const unexpected = Object.keys(payload).filter((key) => key !== 'result');
+  if (unexpected.length) {
+    throw new RequestValidationError(`Unsupported request field: ${unexpected[0]}.`, {
+      code: 'UNSUPPORTED_FIELD'
+    });
+  }
+  try {
+    assertHarnessResult(payload.result);
+  } catch (cause) {
+    throw new RequestValidationError('result must satisfy the HarnessLab harness-result contract.', {
+      code: 'INVALID_HARNESS_RESULT',
+      cause
+    });
+  }
+  return payload.result;
+}
+
+async function runWithTimeout(task, timeoutMs, timeoutMessage) {
   const controller = new AbortController();
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
-      controller.abort(new Error('gateway request timeout'));
-      reject(new ProviderTimeoutError(`Analysis exceeded the ${timeoutMs} ms gateway limit.`));
+      controller.abort(new Error('gateway task timeout'));
+      reject(new ProviderTimeoutError(timeoutMessage));
     }, timeoutMs);
   });
   try {
-    return await Promise.race([
-      provider.analyze(requirement, { signal: controller.signal }),
-      timeout
-    ]);
+    return await Promise.race([task(controller.signal), timeout]);
   } finally {
     clearTimeout(timer);
   }
 }
 
+async function runProviderWithTimeout(provider, requirement, timeoutMs) {
+  return runWithTimeout(
+    (signal) => provider.analyze(requirement, { signal }),
+    timeoutMs,
+    `Analysis exceeded the ${timeoutMs} ms gateway limit.`
+  );
+}
+
+async function runCriticWithTimeout(provider, context, timeoutMs) {
+  if (typeof provider.critique !== 'function') {
+    throw new GatewayError('The configured provider does not support the temporary critic contract.', {
+      code: 'TEMPORARY_CRITIC_UNSUPPORTED',
+      status: 503,
+      expose: true
+    });
+  }
+  return runWithTimeout(
+    (signal) => provider.critique(context, { signal }),
+    timeoutMs,
+    `Temporary critic exceeded the ${timeoutMs} ms worker deadline.`
+  );
+}
+
 function normalizeError(error) {
   if (error instanceof GatewayError) return error;
-  if (error instanceof HarnessResultValidationError) {
-    return new GatewayError('Provider output failed the HarnessLab result contract.', {
+  if (error instanceof HarnessResultValidationError || error instanceof TemporaryWorkerValidationError) {
+    return new GatewayError('Provider output failed a HarnessLab runtime contract.', {
       code: 'INVALID_PROVIDER_RESULT',
       status: 502,
       cause: error,
@@ -199,7 +250,7 @@ export function createGatewayHandler({
         sendJson(response, 200, {
           requestId,
           service: 'harnesslab-gateway',
-          version: '0.2.0',
+          version: '0.3.0',
           status: health.available ? 'ok' : 'degraded',
           provider: {
             name: provider.name,
@@ -212,9 +263,13 @@ export function createGatewayHandler({
           },
           capabilities: {
             analyzeHarness: true,
+            executeTemporaryCritic: typeof provider.critique === 'function',
+            maxTemporaryWorkersPerRequest: 1,
             executeTools: false,
             executeMcp: false,
-            executeA2a: false
+            executeA2a: false,
+            executeCode: false,
+            externalActions: false
           }
         }, { requestId, origin });
         return;
@@ -252,7 +307,77 @@ export function createGatewayHandler({
         return;
       }
 
-      if (url.pathname === '/health' || url.pathname === '/v1/analyze') {
+      if (request.method === 'POST' && url.pathname === '/v1/critique') {
+        const payload = await readJsonBody(request, config.criticMaxBodyBytes);
+        const originalResult = validateCriticRequest(payload);
+        const contextEnvelope = compileCriticContext(originalResult);
+        const workerStartedAt = isoTimestamp(startedAt);
+        let workerResponse = null;
+        let workerStatus = 'completed';
+        let workerFailure = null;
+
+        try {
+          workerResponse = await runCriticWithTimeout(provider, contextEnvelope.context, config.criticTimeoutMs);
+        } catch (error) {
+          const normalizedWorkerError = normalizeError(error);
+          workerStatus = normalizedWorkerError instanceof ProviderTimeoutError || normalizedWorkerError.code === 'PROVIDER_TIMEOUT'
+            ? 'timed_out'
+            : 'failed';
+          workerFailure = normalizedWorkerError;
+        }
+
+        const latencyMs = elapsedMs(startedAt, now);
+        const routedModel = safeModel(workerResponse?.model, provider.model);
+        const reviewedResult = applyTemporaryCriticOutcome(originalResult, {
+          review: workerResponse?.review ?? null,
+          status: workerStatus,
+          provider: provider.name,
+          model: routedModel,
+          liveModel: provider.liveModel,
+          freeOnly: Boolean(provider.freeOnly),
+          latencyMs,
+          timeoutMs: config.criticTimeoutMs,
+          usage: workerResponse?.usage ?? null,
+          contextEnvelope,
+          startedAt: workerStartedAt,
+          completedAt: isoTimestamp(now()),
+          failureCode: workerFailure?.code ?? null,
+          failureMessage: workerFailure?.message ?? null
+        });
+        assertTemporaryWorker(reviewedResult.temporaryWorker);
+
+        sendJson(response, 200, {
+          requestId,
+          provider: {
+            name: provider.name,
+            model: routedModel,
+            liveModel: provider.liveModel,
+            freeOnly: Boolean(provider.freeOnly)
+          },
+          result: reviewedResult,
+          worker: reviewedResult.temporaryWorker,
+          metadata: {
+            latencyMs,
+            usage: workerResponse?.usage ?? null,
+            completed: workerStatus === 'completed'
+          }
+        }, { requestId, origin });
+        logger.info('gateway.temporary_critic.finished', {
+          requestId,
+          workerId: reviewedResult.temporaryWorker.id,
+          status: workerStatus,
+          provider: provider.name,
+          model: routedModel,
+          liveModel: provider.liveModel,
+          freeOnly: Boolean(provider.freeOnly),
+          acceptedFindings: reviewedResult.temporaryWorker.acceptedFindings.length,
+          rejectedFindings: reviewedResult.temporaryWorker.rejectedFindings.length,
+          latencyMs
+        });
+        return;
+      }
+
+      if (['/health', '/v1/analyze', '/v1/critique'].includes(url.pathname)) {
         throw new RequestValidationError('HTTP method is not allowed for this endpoint.', {
           code: 'METHOD_NOT_ALLOWED',
           status: 405
