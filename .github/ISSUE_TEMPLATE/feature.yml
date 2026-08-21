@@ -1,0 +1,32 @@
+name: Feature proposal
+description: Propose a user-facing capability or meaningful enhancement.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Describe the need before proposing the implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Restrictions and out-of-scope items
+  - type: textarea
+    id: risk
+    attributes:
+      label: Security, privacy, cost, or reliability impact

@@ -1,0 +1,10 @@
+*                           @yashumani
+/.github/                   @yashumani
+/docs/architecture/         @yashumani
+/docs/security/             @yashumani
+/docs/decisions/            @yashumani
+/infra/                     @yashumani
+/services/orchestrator/     @yashumani
+/services/worker/           @yashumani
+/packages/policy-engine/    @yashumani
+/packages/model-router/     @yashumani

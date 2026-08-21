@@ -1,0 +1,39 @@
+name: Development task
+description: Define one complete and testable implementation slice.
+title: "[Task]: "
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: In scope
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and blockers
+  - type: textarea
+    id: validation
+    attributes:
+      label: Required validation
+    validations:
+      required: true
+  - type: checkboxes
+    id: agent
+    attributes:
+      label: AI-development readiness
+      options:
+        - label: Scope and acceptance criteria are specific enough for an AI development agent.

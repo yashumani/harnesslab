@@ -1,0 +1,46 @@
+name: Bug report
+description: Report reproducible incorrect behavior.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: Do not include secrets, personal data, or production data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Sanitized logs, traces, screenshots, or failing tests.
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - Low
+        - Medium
+        - High
+        - Security, privacy, or data-loss risk
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I removed secrets and sensitive data.
+          required: true
+        - label: I searched for an existing issue.
+          required: true
