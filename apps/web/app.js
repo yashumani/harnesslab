@@ -1,4 +1,5 @@
 import { analyzeRequirement, examples } from './engine.js';
+import { createWorkspaceStore } from './workspace-store.js';
 
 const $ = (selector) => document.querySelector(selector);
 const form = $('#requirement-form');
@@ -13,6 +14,26 @@ const errorMessage = $('#form-error');
 const copyButton = $('#copy-json');
 const jsonOutput = $('#json-output');
 const runBadge = $('#run-badge');
+const projectSelect = $('#project-select');
+const newProjectButton = $('#new-project-button');
+const newProjectForm = $('#new-project-form');
+const projectNameInput = $('#project-name-input');
+const cancelProjectButton = $('#cancel-project-button');
+const exportWorkspaceButton = $('#export-workspace-button');
+const saveVersionButton = $('#save-version-button');
+const historyContainer = $('#run-history');
+const projectNameValue = $('#active-project-name');
+const projectVersionValue = $('#active-project-versions');
+const projectSavedValue = $('#active-project-saved');
+const persistenceBadge = $('#persistence-badge');
+const workspaceMessage = $('#workspace-message');
+let browserStorage = null;
+try {
+  browserStorage = window.localStorage;
+} catch {
+  browserStorage = null;
+}
+const workspaceStore = createWorkspaceStore({ storage: browserStorage });
 let latestResult = null;
 
 function createElement(tag, className, text) {
@@ -30,6 +51,25 @@ function setStatus(message, type = 'neutral') {
   const status = $('#runtime-status');
   status.dataset.type = type;
   status.querySelector('span:last-child').textContent = message;
+}
+
+function setWorkspaceMessage(message, type = 'neutral') {
+  workspaceMessage.textContent = message;
+  workspaceMessage.dataset.type = type;
+}
+
+function formatTimestamp(value) {
+  if (!value) return 'Not saved yet';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
+}
+
+function fileSafeName(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'workspace';
 }
 
 function renderExamples() {
@@ -186,7 +226,7 @@ function renderConstraints(result) {
   const container = $('#constraint-list');
   clear(container);
   result.constraints.forEach((constraint) => {
-    const item = createElement('li');
+    const item = document.createElement('li');
     item.append(createElement('span', 'constraint-check', '✓'), createElement('span', '', constraint));
     container.appendChild(item);
   });
@@ -225,7 +265,7 @@ function renderEvaluation(result) {
   });
 }
 
-function renderResult(result) {
+function renderResult(result, { restored = false } = {}) {
   latestResult = result;
   renderMetrics(result);
   renderOverview(result);
@@ -240,7 +280,70 @@ function renderResult(result) {
   jsonOutput.textContent = JSON.stringify(result, null, 2);
   runBadge.textContent = result.runId;
   results.hidden = false;
-  setStatus('Demo analysis complete', 'success');
+  saveVersionButton.disabled = false;
+  saveVersionButton.textContent = restored ? 'Save restored run as new version' : 'Save current version';
+  setStatus(restored ? 'Saved harness version restored' : 'Demo analysis complete', 'success');
+}
+
+function renderWorkspace() {
+  const snapshot = workspaceStore.getSnapshot();
+  const activeProject = workspaceStore.getActiveProject();
+  clear(projectSelect);
+  snapshot.projects.forEach((project) => {
+    const option = createElement('option', '', project.name);
+    option.value = project.id;
+    option.selected = project.id === snapshot.activeProjectId;
+    projectSelect.appendChild(option);
+  });
+
+  projectNameValue.textContent = activeProject.name;
+  projectVersionValue.textContent = String(activeProject.runs.length);
+  projectSavedValue.textContent = activeProject.runs.length
+    ? formatTimestamp(activeProject.runs.at(-1).savedAt)
+    : 'Not saved yet';
+
+  const persistent = workspaceStore.getPersistenceMode() === 'browser';
+  persistenceBadge.textContent = persistent ? 'Saved in this browser' : 'Temporary memory only';
+  persistenceBadge.dataset.mode = persistent ? 'browser' : 'memory';
+
+  clear(historyContainer);
+  if (!activeProject.runs.length) {
+    const empty = createElement('div', 'workspace-empty');
+    empty.append(
+      createElement('strong', '', 'No saved harness versions'),
+      createElement('p', '', 'Generate a plan, then save it as the first durable version in this project.')
+    );
+    historyContainer.appendChild(empty);
+    return;
+  }
+
+  [...activeProject.runs].reverse().forEach((run) => {
+    const item = createElement('article', 'history-item');
+    const header = createElement('div', 'history-item-header');
+    const identity = createElement('div');
+    identity.append(
+      createElement('span', 'version-chip', `v${run.version}`),
+      createElement('strong', '', run.architecture)
+    );
+    header.append(identity, createElement('span', 'history-score', run.score === null ? '—' : `${run.score}/100`));
+    const metadata = createElement('p', 'history-meta', `${formatTimestamp(run.savedAt)} · ${run.runId}`);
+    const requirement = createElement('p', 'history-requirement', run.requirement);
+    const openButton = createElement('button', 'history-open-button', 'Open version');
+    openButton.type = 'button';
+    openButton.addEventListener('click', () => {
+      const storedRun = workspaceStore.getRun(activeProject.id, run.id);
+      if (!storedRun) {
+        setWorkspaceMessage('That saved version could not be found.', 'error');
+        return;
+      }
+      input.value = storedRun.requirement;
+      renderResult(storedRun.result, { restored: true });
+      setWorkspaceMessage(`Opened ${activeProject.name} version ${storedRun.version}.`, 'success');
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    item.append(header, metadata, requirement, openButton);
+    historyContainer.appendChild(item);
+  });
 }
 
 async function simulateAnalysis(requirement) {
@@ -259,6 +362,7 @@ async function simulateAnalysis(requirement) {
   analyzeButton.disabled = false;
   resetButton.disabled = false;
   results.setAttribute('aria-busy', 'false');
+  setWorkspaceMessage('Plan generated. Save it when it represents a meaningful harness version.', 'neutral');
 }
 
 form.addEventListener('submit', async (event) => {
@@ -295,6 +399,84 @@ copyButton.addEventListener('click', async () => {
   }
 });
 
+newProjectButton.addEventListener('click', () => {
+  newProjectForm.hidden = false;
+  projectNameInput.focus();
+});
+
+cancelProjectButton.addEventListener('click', () => {
+  newProjectForm.hidden = true;
+  projectNameInput.value = '';
+  setWorkspaceMessage('', 'neutral');
+});
+
+newProjectForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  try {
+    const project = workspaceStore.createProject(projectNameInput.value);
+    projectNameInput.value = '';
+    newProjectForm.hidden = true;
+    renderWorkspace();
+    setWorkspaceMessage(`Created ${project.name}. Generate and save its first harness version.`, 'success');
+    input.focus();
+  } catch (error) {
+    setWorkspaceMessage(error instanceof Error ? error.message : 'Unable to create the project.', 'error');
+    projectNameInput.focus();
+  }
+});
+
+projectSelect.addEventListener('change', () => {
+  try {
+    const project = workspaceStore.selectProject(projectSelect.value);
+    renderWorkspace();
+    const latestRun = project.runs.at(-1);
+    if (latestRun) {
+      input.value = latestRun.requirement;
+      renderResult(latestRun.result, { restored: true });
+      setWorkspaceMessage(`Opened ${project.name} at version ${latestRun.version}.`, 'success');
+    } else {
+      setWorkspaceMessage(`${project.name} has no saved versions yet.`, 'neutral');
+    }
+  } catch (error) {
+    setWorkspaceMessage(error instanceof Error ? error.message : 'Unable to select the project.', 'error');
+  }
+});
+
+saveVersionButton.addEventListener('click', () => {
+  if (!latestResult) return;
+  try {
+    const run = workspaceStore.saveRun(latestResult, { requirement: input.value });
+    renderWorkspace();
+    saveVersionButton.textContent = `Saved as v${run.version}`;
+    setWorkspaceMessage(`Saved ${run.runId} as immutable version ${run.version}.`, 'success');
+    window.setTimeout(() => {
+      saveVersionButton.textContent = 'Save current version';
+    }, 1800);
+  } catch (error) {
+    setWorkspaceMessage(error instanceof Error ? error.message : 'Unable to save this harness version.', 'error');
+  }
+});
+
+exportWorkspaceButton.addEventListener('click', () => {
+  try {
+    const project = workspaceStore.getActiveProject();
+    const payload = workspaceStore.exportWorkspace();
+    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `harnesslab-${fileSafeName(project.name)}-backup.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setWorkspaceMessage('Workspace backup exported. Keep it private because requirements may contain sensitive context.', 'success');
+  } catch (error) {
+    setWorkspaceMessage(error instanceof Error ? error.message : 'Unable to export the workspace.', 'error');
+  }
+});
+
 renderExamples();
+renderWorkspace();
 input.value = examples[0].value;
 renderResult(analyzeRequirement(input.value));
+setWorkspaceMessage('The sample plan is not saved yet. Browser projects are local, not encrypted cloud storage.', 'neutral');
