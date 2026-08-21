@@ -2,246 +2,43 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#07111f">
-  <meta name="description" content="HarnessLab deploy-first skeleton for designing durable AI agent harnesses and bounded temporary subagents.">
-  <title>HarnessLab — Agent Harness Architect</title>
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="HarnessLab is an advanced no-build React studio for designing durable AI agent harnesses and bounded temporary-agent systems.">
+  <title>HarnessLab — Agent Harness Studio</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="./styles.css">
-  <link rel="stylesheet" href="./workspace.css">
-  <link rel="stylesheet" href="./runtime.css">
+  <link rel="preconnect" href="https://esm.sh" crossorigin>
+  <link rel="stylesheet" href="./react.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19.2.4",
+        "react-dom/client": "https://esm.sh/react-dom@19.2.4/client?external=react",
+        "htm": "https://esm.sh/htm@3.1.1"
+      }
+    }
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
-  <div class="app-shell">
-    <aside class="sidebar" aria-label="HarnessLab navigation">
-      <a class="brand" href="#top" aria-label="HarnessLab home">
-        <span class="brand-mark" aria-hidden="true">H</span>
-        <span><strong>HarnessLab</strong><small>Agent systems studio</small></span>
-      </a>
-      <nav class="side-nav">
-        <a class="active" href="#workspace"><span>01</span> Workspace</a>
-        <a href="#model-runtime"><span>02</span> Model gateway</a>
-        <a href="#design"><span>03</span> Design</a>
-        <a href="#runtime"><span>04</span> Execution</a>
-        <a href="#controls"><span>05</span> Controls</a>
-        <a href="#evidence"><span>06</span> Evidence</a>
-      </nav>
-      <div class="sidebar-note">
-        <span class="mode-dot" aria-hidden="true"></span>
-        <div><strong>Provider-neutral runtime</strong><p>Browser fallback always works. Live Ollama requires your own configured gateway.</p></div>
+  <div id="root">
+    <div class="boot-shell" role="status" aria-live="polite">
+      <div class="boot-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div>
+        <strong>HarnessLab</strong>
+        <p>Loading the no-build React workspace…</p>
       </div>
-      <p class="sidebar-principle">Agents are disposable.<br>Harnesses are durable.</p>
-    </aside>
-
-    <main id="main-content" class="main-content">
-      <header id="top" class="topbar">
-        <div><span class="topbar-label">M0 / Provider-neutral analysis</span><strong>Harness Architect</strong></div>
-        <div id="runtime-status" class="runtime-status" data-type="success" role="status" aria-live="polite">
-          <span class="status-dot" aria-hidden="true"></span><span>Browser analysis ready</span>
-        </div>
-      </header>
-
-      <section id="design" class="hero-section">
-        <div class="hero-copy">
-          <span class="eyebrow">Design before autonomy</span>
-          <h1>Turn an agent idea into a bounded, explainable harness.</h1>
-          <p>Describe the use case. HarnessLab evaluates whether you need a workflow, one agent, or temporary specialists—and shows the controls that keep the system dependable.</p>
-          <div class="hero-principles" aria-label="Core design principles">
-            <span>Deterministic first</span><span>Temporary intelligence</span><span>Structured artifacts</span><span>Least privilege</span>
-          </div>
-        </div>
-        <article class="deploy-card">
-          <span class="deploy-kicker">Current deployed contract</span>
-          <strong>Project → Runtime → Harness plan → Version → Evidence</strong>
-          <p>The browser remains fully functional without a server. A compatible gateway can now replace only the analysis seam while projects, controls, artifacts, versions, and rendering stay stable.</p>
-          <div class="deploy-flow" aria-label="Deploy-first flow"><span>Project</span><i></i><span>Runtime</span><i></i><span>Plan</span><i></i><span>Evidence</span></div>
-        </article>
-      </section>
-
-      <section id="workspace" class="workspace-section content-section" aria-labelledby="workspace-title">
-        <div class="section-heading">
-          <div><span class="eyebrow">Durable workspace</span><h2 id="workspace-title">Organize harnesses into projects and immutable versions</h2></div>
-          <p>Current storage is browser-local. It is neither encrypted cloud storage nor cross-device synchronization.</p>
-        </div>
-        <div class="workspace-grid">
-          <article class="panel workspace-project-panel">
-            <div class="workspace-toolbar">
-              <label class="project-select-label" for="project-select"><span>Active project</span><select id="project-select"></select></label>
-              <div class="workspace-actions">
-                <button id="new-project-button" class="secondary-button" type="button">New project</button>
-                <button id="export-workspace-button" class="secondary-button" type="button">Export backup</button>
-              </div>
-            </div>
-            <form id="new-project-form" class="new-project-form" hidden>
-              <label for="project-name-input">Project name</label>
-              <div><input id="project-name-input" name="project-name" minlength="2" maxlength="80" autocomplete="off" required placeholder="Example: Telecom anomaly investigator"><button class="primary-button compact-button" type="submit">Create</button><button id="cancel-project-button" class="secondary-button" type="button">Cancel</button></div>
-            </form>
-            <div class="workspace-stat-grid" aria-label="Active project summary">
-              <div><span>Project</span><strong id="active-project-name"></strong></div>
-              <div><span>Saved versions</span><strong id="active-project-versions">0</strong></div>
-              <div><span>Last saved</span><strong id="active-project-saved">Not saved yet</strong></div>
-            </div>
-            <div class="persistence-row"><span id="persistence-badge" class="persistence-badge">Saved in this browser</span><p>Do not enter credentials or secrets. Exported backups may contain the full requirement text.</p></div>
-            <p id="workspace-message" class="workspace-message" role="status" aria-live="polite"></p>
-          </article>
-
-          <article class="panel workspace-history-panel">
-            <div class="history-heading"><div><span class="eyebrow">Version history</span><h2>Retained harness artifacts</h2></div><button id="save-version-button" class="primary-button compact-button" type="button" disabled>Save current version</button></div>
-            <div id="run-history" class="run-history"></div>
-          </article>
-        </div>
-      </section>
-
-      <section id="model-runtime" class="runtime-settings-section content-section" aria-labelledby="model-runtime-title">
-        <div class="section-heading">
-          <div><span class="eyebrow">Analysis runtime</span><h2 id="model-runtime-title">Choose how the harness plan is produced</h2></div>
-          <p>The browser never accepts model-provider keys. Hosted or local providers stay behind a separately configured HarnessLab gateway.</p>
-        </div>
-        <article class="panel runtime-settings-card">
-          <div class="runtime-config-grid">
-            <label class="runtime-field" for="analysis-mode-select"><span>Analysis mode</span><select id="analysis-mode-select">
-              <option value="browser">Browser deterministic — always available</option>
-              <option value="automatic">Automatic — gateway then recorded fallback</option>
-              <option value="gateway">Gateway required — no silent fallback</option>
-            </select></label>
-            <label class="runtime-field" for="gateway-url-input"><span>HarnessLab gateway URL</span><input id="gateway-url-input" type="url" inputmode="url" autocomplete="url" spellcheck="false" value="http://127.0.0.1:8787" aria-describedby="gateway-url-help"></label>
-            <button id="test-gateway-button" class="secondary-button compact-button" type="button">Test connection</button>
-          </div>
-          <div class="runtime-health-row">
-            <span id="gateway-health-badge" class="gateway-health-badge" data-state="neutral">Not checked</span>
-            <p id="gateway-health-message" role="status" aria-live="polite">Browser deterministic mode is active. Start the local gateway only when you want server-side deterministic or Ollama-assisted analysis.</p>
-          </div>
-          <div class="runtime-boundary" id="gateway-url-help"><span aria-hidden="true">⌁</span><div><strong>No provider credentials in the browser</strong><p>The gateway URL and mode are the only runtime settings retained locally. Ollama configuration belongs in the gateway environment; use HTTPS for a hosted gateway.</p></div></div>
-        </article>
-      </section>
-
-      <section class="composer-section" aria-labelledby="composer-title">
-        <form id="requirement-form" class="composer-card">
-          <div class="section-heading compact">
-            <div><span class="eyebrow">Requirement intake</span><h2 id="composer-title">What should the agent system accomplish?</h2></div>
-            <span id="analysis-mode-badge" class="demo-badge">Browser deterministic</span>
-          </div>
-          <label class="sr-only" for="requirement-input">Agent requirement</label>
-          <textarea id="requirement-input" rows="6" minlength="8" maxlength="1600" spellcheck="true" placeholder="Example: Build an agent that investigates KPI anomalies, validates data quality, queries approved systems, and produces an evidence-backed report."></textarea>
-          <div class="example-area"><span>Try a scenario</span><div id="example-list" class="example-list"></div></div>
-          <p id="form-error" class="form-error" role="alert"></p>
-          <div class="composer-actions">
-            <button id="analyze-button" class="primary-button" type="submit"><span>Generate harness plan</span><span aria-hidden="true">→</span></button>
-            <button id="reset-button" class="secondary-button" type="button">Reset example</button>
-            <p>Browser mode needs no account, key, model download, or paid service.</p>
-          </div>
-          <div id="analysis-progress" class="analysis-progress" hidden><span class="progress-spinner" aria-hidden="true"></span><span id="progress-label">Compiling the requirement…</span></div>
-        </form>
-      </section>
-
-      <div id="results" class="results" hidden aria-busy="false">
-        <section class="result-header" aria-labelledby="result-title">
-          <div><span class="eyebrow">Generated harness blueprint</span><h2 id="result-title">A deployable planning contract—not a prompt dump.</h2></div>
-          <div class="result-badge-group"><span id="result-runtime-badge" class="result-runtime-badge" data-source="browser">Browser · deterministic</span><span id="run-badge" class="run-badge">DEMO</span></div>
-        </section>
-        <section class="metric-section" aria-label="Harness metrics">
-          <div id="metric-grid" class="metric-grid"></div>
-          <div class="runtime-provenance" aria-label="Analysis provenance">
-            <div><span>Source</span><strong id="runtime-source-value">browser</strong></div>
-            <div><span>Provider</span><strong id="runtime-provider-value">deterministic</strong></div>
-            <div><span>Model</span><strong id="runtime-model-value">none</strong></div>
-            <div><span>Latency</span><strong id="runtime-latency-value">0 ms</strong></div>
-            <div><span>Fallback</span><strong id="runtime-fallback-value">no</strong></div>
-          </div>
-        </section>
-
-        <section class="overview-grid">
-          <article class="panel architecture-summary">
-            <div class="panel-heading">
-              <div><span class="eyebrow">Architecture decision</span><h2 id="architecture-kind"></h2></div>
-              <span class="domain-chip" id="domain-value"></span>
-            </div>
-            <p id="architecture-reason" class="lead-text"></p>
-            <div class="recommendation-box"><span>Recommendation</span><p id="recommendation"></p></div>
-            <div><span class="subheading">Detected capabilities</span><div id="capability-list" class="capability-list"></div></div>
-          </article>
-          <article class="panel requirement-summary">
-            <span class="eyebrow">Interpreted requirement</span><blockquote id="result-requirement"></blockquote>
-            <div class="question-block"><span class="subheading">Questions before live execution</span><ul id="question-list"></ul></div>
-          </article>
-        </section>
-
-        <section id="runtime" class="content-section" aria-labelledby="runtime-title">
-          <div class="section-heading">
-            <div><span class="eyebrow">Durable harness</span><h2 id="runtime-title">Execution stages and protocol decisions</h2></div>
-            <p>The control flow remains stable even when models and temporary agents change.</p>
-          </div>
-          <div class="runtime-grid">
-            <div id="stage-list" class="stage-list"></div>
-            <aside class="panel protocol-panel">
-              <div class="panel-heading compact-heading"><div><span class="eyebrow">Protocol advisor</span><h2>MCP, A2A, retrieval, or functions?</h2></div></div>
-              <div id="protocol-list" class="protocol-list"></div>
-            </aside>
-          </div>
-        </section>
-
-        <section class="content-section" aria-labelledby="subagent-title">
-          <div class="section-heading">
-            <div><span class="eyebrow">Temporary intelligence</span><h2 id="subagent-title">Bounded subagents selected for this task</h2></div>
-            <p>Each worker receives isolated context, minimum tools, a deadline, and one structured return artifact.</p>
-          </div>
-          <div id="subagent-list" class="subagent-grid"></div>
-        </section>
-
-        <section id="controls" class="content-section" aria-labelledby="controls-title">
-          <div class="section-heading">
-            <div><span class="eyebrow">Control plane</span><h2 id="controls-title">Permissions, lifecycle limits, and retained knowledge</h2></div>
-            <p>Autonomy is defined capability by capability—not with one vague autonomous switch.</p>
-          </div>
-          <div class="controls-grid">
-            <article class="panel table-panel">
-              <div class="panel-heading compact-heading"><div><span class="eyebrow">Permission matrix</span><h2>What this harness may do</h2></div></div>
-              <div class="table-scroll">
-                <table><thead><tr><th scope="col">Capability</th><th scope="col">Policy</th><th scope="col">Enforcement</th></tr></thead><tbody id="permission-body"></tbody></table>
-              </div>
-            </article>
-            <article class="panel artifact-panel">
-              <div class="panel-heading compact-heading"><div><span class="eyebrow">Artifact blackboard</span><h2>Knowledge that survives agent disposal</h2></div></div>
-              <div id="artifact-list" class="artifact-list"></div>
-            </article>
-          </div>
-          <article class="panel constraint-panel">
-            <div><span class="eyebrow">Non-negotiable boundaries</span><h2>Safe defaults in the deployed skeleton</h2></div>
-            <ul id="constraint-list" class="constraint-list"></ul>
-          </article>
-        </section>
-
-        <section id="evidence" class="content-section" aria-labelledby="evidence-title">
-          <div class="section-heading">
-            <div><span class="eyebrow">Evidence and observability</span><h2 id="evidence-title">Every decision leaves a trace</h2></div>
-            <p>Browser fallback and gateway execution both record provenance; later workers add tool, cost, and artifact telemetry.</p>
-          </div>
-          <div class="evidence-grid">
-            <article class="panel trace-panel">
-              <div class="panel-heading compact-heading"><div><span class="eyebrow">Execution trace</span><h2>Validated planning events</h2></div></div>
-              <div id="trace-list" class="trace-list"></div>
-            </article>
-            <article class="panel evaluation-panel">
-              <div class="score-orb" aria-label="Overall evaluation score"><strong id="overall-score">0</strong><span>/100</span></div>
-              <span class="eyebrow">Evaluation verdict</span><h2 id="evaluation-verdict"></h2><div id="evaluation-list" class="evaluation-list"></div>
-            </article>
-          </div>
-          <details class="json-panel">
-            <summary><span><strong>Structured harness JSON</strong><small>Validated contract consumed by the workspace, gateway, future worker runtime, and evaluator.</small></span><span aria-hidden="true">⌄</span></summary>
-            <div class="json-toolbar"><span>Read-only validated artifact</span><button id="copy-json" type="button">Copy JSON</button></div>
-            <pre><code id="json-output"></code></pre>
-          </details>
-        </section>
-      </div>
-
-      <footer>
-        <div><strong>HarnessLab</strong><span>Deploy first. Replace seams safely. Keep the harness durable.</span></div>
-        <a href="https://github.com/yashumani/harnesslab">View source repository</a>
-      </footer>
-    </main>
+    </div>
   </div>
+  <noscript>
+    <div class="noscript-card">
+      <strong>JavaScript is required.</strong>
+      <p>HarnessLab runs as a no-build React application directly in your browser.</p>
+    </div>
+  </noscript>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
