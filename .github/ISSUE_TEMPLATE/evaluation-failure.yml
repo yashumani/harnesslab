@@ -1,0 +1,36 @@
+name: Agent evaluation failure
+description: Record a reproducible harness, model, tool-use, or policy regression.
+title: "[Eval failure]: "
+body:
+  - type: input
+    id: eval
+    attributes:
+      label: Evaluation or scenario identifier
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: trace
+    attributes:
+      label: Sanitized trace and artifacts
+  - type: textarea
+    id: environment
+    attributes:
+      label: Harness, model, provider, and configuration
+    validations:
+      required: true
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Suspected cause or changed dependency

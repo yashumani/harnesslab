@@ -1,0 +1,39 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# JavaScript / TypeScript
+node_modules/
+.pnpm-store/
+dist/
+build/
+.next/
+coverage/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Runtime data
+artifacts/
+logs/
+tmp/
+*.sqlite
+*.sqlite3
+
+# IDE and operating system
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

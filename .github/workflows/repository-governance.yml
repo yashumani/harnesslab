@@ -1,0 +1,64 @@
+name: Repository Governance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-governance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  required:
+    name: CI / required
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify required repository files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required_files=(
+            README.md
+            SECURITY.md
+            CONTRIBUTING.md
+            SUPPORT.md
+            AGENTS.md
+            .env.example
+            .github/CODEOWNERS
+            .github/pull_request_template.md
+            .github/dependabot.yml
+          )
+          for file in "${required_files[@]}"; do
+            test -f "$file" || { echo "Missing required file: $file"; exit 1; }
+          done
+
+      - name: Reject committed local environment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          unexpected=$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '(^|/)\.env\.example$' || true)
+          if [[ -n "$unexpected" ]]; then
+            echo "Unexpected environment files are tracked:"
+            echo "$unexpected"
+            exit 1
+          fi
+
+      - name: Reject common private-key files
+        shell: bash
+        run: |
+          set -euo pipefail
+          unexpected=$(git ls-files | grep -Ei '\.(pem|key|p12|pfx)$' || true)
+          if [[ -n "$unexpected" ]]; then
+            echo "Potential private-key files are tracked:"
+            echo "$unexpected"
+            exit 1
+          fi

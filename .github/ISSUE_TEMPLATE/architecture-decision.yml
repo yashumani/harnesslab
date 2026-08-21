@@ -1,0 +1,32 @@
+name: Architecture decision
+description: Record a consequential technical choice and its tradeoffs.
+title: "[Architecture]: "
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and decision driver
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options considered
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommended decision
+    validations:
+      required: true
+  - type: textarea
+    id: consequences
+    attributes:
+      label: Consequences, risks, and reversibility
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Evidence or experiment required
