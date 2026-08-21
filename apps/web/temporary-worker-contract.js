@@ -10,6 +10,16 @@ const ALLOWED_CATEGORIES = new Set([
   'protocol_fit'
 ]);
 const ALLOWED_SEVERITIES = new Set(['low', 'medium', 'high']);
+const ALLOWED_WORKER_FIELDS = new Set([
+  'id', 'role', 'task', 'status', 'provider', 'model', 'liveModel', 'freeOnly',
+  'startedAt', 'completedAt', 'latencyMs', 'timeoutMs', 'callBudget', 'callsUsed',
+  'childSpawning', 'tools', 'externalActions', 'contextFields', 'inputBytes',
+  'artifactId', 'review', 'acceptedFindings', 'rejectedFindings', 'usage', 'failure'
+]);
+const ALLOWED_REVIEW_FIELDS = new Set(['verdict', 'summary', 'confidence', 'findings']);
+const ALLOWED_FINDING_FIELDS = new Set([
+  'id', 'category', 'severity', 'confidence', 'observation', 'recommendation', 'question'
+]);
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -25,11 +35,17 @@ function isNonNegativeNumber(value) {
   return Number.isFinite(value) && value >= 0;
 }
 
+function validateAllowedFields(value, allowed, path, errors) {
+  const unexpected = Object.keys(value).filter((field) => !allowed.has(field));
+  if (unexpected.length) errors.push(`${path} contains unsupported field ${unexpected[0]}.`);
+}
+
 function validateFinding(value, path, errors) {
   if (!isRecord(value)) {
     errors.push(`${path} must be an object.`);
     return;
   }
+  validateAllowedFields(value, ALLOWED_FINDING_FIELDS, path, errors);
   if (!isText(value.id)) errors.push(`${path}.id must be non-empty text.`);
   if (!ALLOWED_CATEGORIES.has(value.category)) errors.push(`${path}.category is unsupported.`);
   if (!ALLOWED_SEVERITIES.has(value.severity)) errors.push(`${path}.severity is unsupported.`);
@@ -48,6 +64,7 @@ function validateReview(value, path, errors) {
     errors.push(`${path} must be an object.`);
     return;
   }
+  validateAllowedFields(value, ALLOWED_REVIEW_FIELDS, path, errors);
   if (!['pass', 'revise'].includes(value.verdict)) errors.push(`${path}.verdict must be pass or revise.`);
   if (!isText(value.summary)) errors.push(`${path}.summary must be non-empty text.`);
   if (!Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1) {
@@ -72,6 +89,7 @@ export class TemporaryWorkerValidationError extends Error {
 export function validateTemporaryWorker(value) {
   const errors = [];
   if (!isRecord(value)) return { valid: false, errors: ['temporaryWorker must be an object.'] };
+  validateAllowedFields(value, ALLOWED_WORKER_FIELDS, 'temporaryWorker', errors);
 
   ['id', 'role', 'task', 'provider', 'artifactId'].forEach((field) => {
     if (!isText(value[field])) errors.push(`${field} must be non-empty text.`);
@@ -116,6 +134,8 @@ export function validateTemporaryWorker(value) {
     if (!isRecord(value.failure)) {
       errors.push('failure must be an object when the worker did not complete.');
     } else {
+      const unexpectedFailure = Object.keys(value.failure).filter((field) => !['code', 'message'].includes(field));
+      if (unexpectedFailure.length) errors.push(`failure contains unsupported field ${unexpectedFailure[0]}.`);
       if (!isText(value.failure.code)) errors.push('failure.code must be non-empty text.');
       if (!isText(value.failure.message)) errors.push('failure.message must be non-empty text.');
     }
