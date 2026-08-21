@@ -7,6 +7,10 @@ import {
   createArchitecturePrompt,
   parseArchitectureSupplement
 } from './architecture-guidance.mjs';
+import {
+  createCriticPrompt,
+  parseCriticReview
+} from '../temporary-critic.mjs';
 import { fetchProviderJson } from './provider-http.mjs';
 
 export function createOllamaProvider({
@@ -50,7 +54,7 @@ export function createOllamaProvider({
     }
   }
 
-  async function analyze(requirement, { signal = null } = {}) {
+  async function requestJsonPrompt(prompt, { signal = null, system }) {
     if (!configured) throw new ProviderUnavailableError('Ollama is selected but OLLAMA_DEFAULT_MODEL is not configured.');
     const { response, payload } = await fetchProviderJson({
       fetchImpl,
@@ -63,11 +67,8 @@ export function createOllamaProvider({
           stream: false,
           format: 'json',
           messages: [
-            {
-              role: 'system',
-              content: 'You are a bounded architecture-analysis worker. Follow the requested JSON schema and never claim external execution.'
-            },
-            { role: 'user', content: createArchitecturePrompt(requirement) }
+            { role: 'system', content: system },
+            { role: 'user', content: prompt }
           ],
           options: { temperature }
         })
@@ -82,8 +83,22 @@ export function createOllamaProvider({
         ? new ProviderUnavailableError(`Ollama returned HTTP ${response.status}.`)
         : new ProviderResponseError(`Ollama rejected the request with HTTP ${response.status}.`);
     }
+    return {
+      content: payload?.message?.content,
+      usage: {
+        promptTokens: Number.isFinite(payload?.prompt_eval_count) ? payload.prompt_eval_count : null,
+        completionTokens: Number.isFinite(payload?.eval_count) ? payload.eval_count : null,
+        totalDurationNs: Number.isFinite(payload?.total_duration) ? payload.total_duration : null
+      }
+    };
+  }
 
-    const supplement = parseArchitectureSupplement(payload?.message?.content, { providerLabel: 'Ollama' });
+  async function analyze(requirement, { signal = null } = {}) {
+    const response = await requestJsonPrompt(createArchitecturePrompt(requirement), {
+      signal,
+      system: 'You are a bounded architecture-analysis worker. Follow the requested JSON schema and never claim external execution.'
+    });
+    const supplement = parseArchitectureSupplement(response.content, { providerLabel: 'Ollama' });
     return {
       result: applyArchitectureSupplement(requirement, supplement, {
         providerLabel: 'Ollama',
@@ -94,11 +109,19 @@ export function createOllamaProvider({
         verdictLabel: 'Ollama-assisted'
       }),
       model: normalizedModel,
-      usage: {
-        promptTokens: Number.isFinite(payload?.prompt_eval_count) ? payload.prompt_eval_count : null,
-        completionTokens: Number.isFinite(payload?.eval_count) ? payload.eval_count : null,
-        totalDurationNs: Number.isFinite(payload?.total_duration) ? payload.total_duration : null
-      }
+      usage: response.usage
+    };
+  }
+
+  async function critique(context, { signal = null } = {}) {
+    const response = await requestJsonPrompt(createCriticPrompt(context), {
+      signal,
+      system: 'You are one temporary architecture critic. You have no tools, no external access, no child-agent permission, and one structured response only.'
+    });
+    return {
+      review: parseCriticReview(response.content, { providerLabel: 'Ollama critic' }),
+      model: normalizedModel,
+      usage: response.usage
     };
   }
 
@@ -108,6 +131,7 @@ export function createOllamaProvider({
     liveModel: true,
     configured,
     health,
-    analyze
+    analyze,
+    critique
   };
 }
