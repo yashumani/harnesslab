@@ -73,7 +73,7 @@ export function createOpenRouterProvider({
     const result = {
       accept: 'application/json',
       authorization: `Bearer ${normalizedKey}`,
-      'x-title': title
+      'x-openrouter-title': title
     };
     if (json) result['content-type'] = 'application/json';
     if (referer) result['http-referer'] = referer;
