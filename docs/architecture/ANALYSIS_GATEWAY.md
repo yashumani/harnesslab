@@ -2,7 +2,7 @@
 
 ## Purpose
 
-HarnessLab now has a replaceable analysis seam. The public static UI remains deployable and useful by itself, while an optional gateway can supply server-side deterministic analysis or bounded Ollama-assisted guidance.
+HarnessLab has a replaceable analysis seam. The public static UI remains deployable and useful by itself, while an optional gateway can supply server-side deterministic analysis, bounded local Ollama guidance, or bounded OpenRouter free-model guidance.
 
 ```text
 Browser UI
@@ -10,7 +10,8 @@ Browser UI
       ├─ browser deterministic provider
       └─ HarnessLab gateway
            ├─ deterministic provider
-           └─ Ollama provider
+           ├─ Ollama provider
+           └─ OpenRouter free-only provider
   → shared HarnessResult contract
   → existing renderer, project history, artifacts, and evaluations
 ```
@@ -37,7 +38,7 @@ Only gateway URL, mode, and timeout metadata may be stored in the browser. Provi
 
 ### `GET /health`
 
-Returns gateway identity, configured provider, availability, and supported capabilities. It never returns environment values, provider base URLs, credentials, stack traces, or raw provider responses.
+Returns gateway identity, configured provider, availability, free-only policy, and supported capabilities. It never returns environment values, provider base URLs, credentials, API-key metadata, stack traces, or raw provider responses.
 
 Representative response:
 
@@ -45,12 +46,13 @@ Representative response:
 {
   "requestId": "...",
   "service": "harnesslab-gateway",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "status": "ok",
   "provider": {
-    "name": "deterministic",
-    "model": null,
-    "liveModel": false,
+    "name": "openrouter",
+    "model": "openrouter/free",
+    "liveModel": true,
+    "freeOnly": true,
     "configured": true,
     "available": true,
     "reason": null
@@ -74,7 +76,7 @@ Request:
 }
 ```
 
-The gateway rejects unknown request fields so a browser cannot choose providers, submit credentials, or expand server permissions through the request body.
+The gateway rejects unknown request fields so a browser cannot choose providers, submit credentials, select a paid model, or expand server permissions through the request body.
 
 Response:
 
@@ -82,14 +84,19 @@ Response:
 {
   "requestId": "...",
   "provider": {
-    "name": "deterministic",
-    "model": null,
-    "liveModel": false
+    "name": "openrouter",
+    "model": "provider/actual-routed-model:free",
+    "liveModel": true,
+    "freeOnly": true
   },
   "result": {},
   "metadata": {
-    "latencyMs": 4,
-    "usage": null
+    "latencyMs": 1200,
+    "usage": {
+      "promptTokens": 400,
+      "completionTokens": 150,
+      "totalTokens": 550
+    }
   }
 }
 ```
@@ -101,14 +108,16 @@ Response:
 - Exact-origin CORS allowlist; no wildcard default.
 - JSON-only request bodies.
 - 1,600-character requirement limit.
-- Configurable body-size limit.
-- Gateway and provider timeouts.
-- Bounded response parsing in the browser and Ollama adapter.
+- Configurable request-body limit.
+- Gateway and provider timeouts covering headers and complete response bodies.
+- Bounded response parsing for browser, Ollama, and OpenRouter.
 - Random request identifiers and no-store responses.
-- Sanitized error envelopes without stack traces or raw model content.
+- Sanitized error envelopes without stack traces, raw model content, or credentials.
 - Deterministic default provider.
-- No browser API-key field or authorization header.
+- No browser API-key field or provider authorization header.
 - Server-selected provider; the request cannot override it.
+- Fixed official OpenRouter HTTPS API origin.
+- OpenRouter model policy restricted to `openrouter/free` or an explicit identifier ending in `:free`.
 - Non-root container runtime.
 
 ## Run locally
@@ -142,7 +151,37 @@ npm run gateway
 
 The Ollama adapter requests a small JSON architecture supplement. It may refine architecture kind, rationale, recommendation, unresolved questions, and confidence. Deterministic HarnessLab permissions, stages, artifacts, trace requirements, safety constraints, and evaluations remain authoritative.
 
-An unavailable model, malformed response, schema violation, or timeout returns an explicit gateway error. Browser **Automatic** mode may then use and record deterministic fallback; **Gateway required** mode does not.
+## Run with OpenRouter free models
+
+OpenRouter requires an account-created API key even for free API routes. Place the key only in the gateway environment:
+
+```bash
+export HARNESSLAB_PROVIDER=openrouter
+export OPENROUTER_API_KEY=<your-openrouter-api-key>
+export OPENROUTER_DEFAULT_MODEL=openrouter/free
+npm run gateway
+```
+
+A specific free variant can replace the router:
+
+```bash
+export OPENROUTER_DEFAULT_MODEL=<provider/model:free>
+```
+
+Any model that is neither exactly `openrouter/free` nor suffixed with `:free` is rejected during gateway startup. HarnessLab does not provide a paid-model override in this slice.
+
+The adapter:
+
+- validates the key through `GET https://openrouter.ai/api/v1/key`;
+- sends inference to `POST https://openrouter.ai/api/v1/chat/completions`;
+- requests non-streaming structured JSON;
+- caps output tokens and response size;
+- records the actual routed model when OpenRouter returns it;
+- never returns key metadata or raw provider errors to the browser.
+
+The OpenRouter and Ollama adapters share one bounded architecture-supplement parser. Deterministic permissions, stages, artifacts, safety constraints, and evaluations remain authoritative regardless of provider.
+
+An unavailable provider, malformed response, schema violation, or timeout returns an explicit gateway error. Browser **Automatic** mode may then use and record deterministic fallback; **Gateway required** mode does not.
 
 ## Container
 
@@ -151,10 +190,10 @@ docker build -f services/gateway/Dockerfile -t harnesslab-gateway .
 docker run --rm -p 8787:8787 harnesslab-gateway
 ```
 
-The image starts with the deterministic provider. Pass Ollama settings only through the runtime environment when needed.
+The image starts with the deterministic provider. Pass Ollama or OpenRouter settings only through the runtime environment when needed. Do not bake credentials into an image or repository file.
 
 ## Deployment seam
 
 GitHub Pages continues publishing only `apps/web`. The gateway is independently deployable to a container host later. A hosted gateway should use HTTPS, narrow origin allowlists, environment-scoped provider configuration, authentication before multi-user use, rate limits, and centralized traces.
 
-The next server-side slices will add authenticated project persistence and bounded temporary-worker execution behind the same browser contract. OpenRouter remains a future server-side adapter; it is not activated by this slice.
+The next server-side slices will add authenticated project persistence and bounded temporary-worker execution behind the same browser contract.
