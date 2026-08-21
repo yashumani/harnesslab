@@ -31,7 +31,7 @@ jobs:
       - name: Run unit, integration, syntax, and deployment-contract checks
         run: npm run check
 
-      - name: Smoke test the static browser application
+      - name: Smoke test the no-build React browser application
         shell: bash
         run: |
           set -euo pipefail
@@ -44,16 +44,18 @@ jobs:
             fi
             sleep 0.25
           done
-          grep -q "HarnessLab" /tmp/harnesslab-index.html
-          grep -q "Provider-neutral runtime" /tmp/harnesslab-index.html
-          grep -q "No provider credentials in the browser" /tmp/harnesslab-index.html
+          grep -q 'HarnessLab' /tmp/harnesslab-index.html
+          grep -q 'id="root"' /tmp/harnesslab-index.html
+          grep -q 'react@18.3.1' /tmp/harnesslab-index.html
+          curl --fail --silent http://127.0.0.1:4173/app.js > /tmp/harnesslab-app.js
+          grep -q 'ReactDomRuntime.createRoot' /tmp/harnesslab-app.js
+          grep -q 'No provider keys in browser' /tmp/harnesslab-app.js
+          curl --fail --silent http://127.0.0.1:4173/react-app.css > /tmp/harnesslab-react.css
+          grep -q '.architecture-map' /tmp/harnesslab-react.css
           curl --fail --silent http://127.0.0.1:4173/engine.js > /dev/null
           curl --fail --silent http://127.0.0.1:4173/workspace-store.js > /dev/null
           curl --fail --silent http://127.0.0.1:4173/analysis-client.js > /dev/null
           curl --fail --silent http://127.0.0.1:4173/result-contract.js > /dev/null
-          curl --fail --silent http://127.0.0.1:4173/styles.css > /dev/null
-          curl --fail --silent http://127.0.0.1:4173/workspace.css > /dev/null
-          curl --fail --silent http://127.0.0.1:4173/runtime.css > /dev/null
 
       - name: Smoke test the deterministic analysis gateway
         shell: bash
