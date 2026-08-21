@@ -1,4 +1,4 @@
-name: Deploy HarnessLab skeleton
+name: Deploy HarnessLab to Pages
 
 on:
   push:
@@ -18,8 +18,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: harnesslab-pages
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -28,7 +28,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -39,7 +39,7 @@ jobs:
           node-version: '22'
           package-manager-cache: false
 
-      - name: Validate deployable skeleton
+      - name: Validate no-build React application
         run: npm run check
 
       - name: Configure GitHub Pages
@@ -54,3 +54,14 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+      - name: Record deployed URL
+        shell: bash
+        run: |
+          {
+            echo '### HarnessLab Pages deployment'
+            echo
+            echo "Published the validated no-build React application to:"
+            echo
+            echo "${{ steps.deployment.outputs.page_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"
