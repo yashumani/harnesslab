@@ -31,14 +31,15 @@ The deployed UI includes:
 - browser-local projects, immutable harness versions, restore, and JSON backup;
 - provider-neutral runtime controls with browser, automatic-fallback, and gateway-required modes.
 
-The optional gateway adds a server-side provider seam without breaking the static experience:
+The optional gateway adds server-side provider seams without breaking the static experience:
 
 ```text
 Browser analysis client
   ├─ deterministic browser engine
   └─ HarnessLab gateway
        ├─ deterministic provider
-       └─ explicitly configured Ollama provider
+       ├─ explicitly configured Ollama provider
+       └─ explicitly configured OpenRouter free-only provider
 ```
 
 The browser never accepts provider keys. Gateway responses and browser fallback both pass the shared harness-result validator before rendering or saving.
@@ -56,7 +57,8 @@ https://yashumani.github.io/harnesslab/
 - Node.js 22 or newer for tests and the analysis gateway;
 - Python 3 for the zero-dependency local static server;
 - Docker only when validating or running the optional gateway container;
-- Ollama only when explicitly selecting the Ollama provider.
+- Ollama only when explicitly selecting the Ollama provider;
+- an OpenRouter account-created API key only when explicitly selecting the OpenRouter provider.
 
 No package installation is required for the current slices.
 
@@ -104,6 +106,30 @@ npm run gateway
 
 Ollama supplies a bounded architecture supplement. Deterministic HarnessLab permissions, stages, artifact requirements, safety constraints, and validation remain authoritative. An unavailable or invalid model response becomes an explicit error; only browser **Automatic** mode may use and record deterministic fallback.
 
+### Enable OpenRouter free models
+
+OpenRouter still requires an API key. Put it only in the gateway environment:
+
+```bash
+export HARNESSLAB_PROVIDER=openrouter
+export OPENROUTER_API_KEY=<your-openrouter-api-key>
+export OPENROUTER_DEFAULT_MODEL=openrouter/free
+npm run gateway
+```
+
+HarnessLab permits only:
+
+```text
+openrouter/free
+<provider/model:free>
+```
+
+A paid or ambiguous model identifier is rejected at gateway startup. This slice has no paid-model override.
+
+The adapter validates the key without returning its metadata, uses the fixed official OpenRouter HTTPS API origin, requests structured JSON, records the actual routed model when available, and keeps deterministic HarnessLab permissions, stages, artifacts, safety constraints, and evaluations authoritative.
+
+No OpenRouter account, key, credit purchase, or live request is created automatically by this repository.
+
 ## Run the gateway container
 
 ```bash
@@ -111,7 +137,7 @@ docker build -f services/gateway/Dockerfile -t harnesslab-gateway .
 docker run --rm -p 8787:8787 harnesslab-gateway
 ```
 
-The container runs as a non-root user and starts with the deterministic provider.
+The container runs as a non-root user and starts with the deterministic provider. Pass any Ollama or OpenRouter settings at runtime; never bake a credential into the image.
 
 ## Test
 
@@ -126,9 +152,11 @@ The suite covers:
 - browser workspace recovery, immutable versions, retention, and backup export;
 - shared harness-result validation;
 - browser runtime modes, fallback evidence, and gateway identity checks;
-- gateway CORS, body-size, method, timeout, and sanitized-error behavior;
+- gateway CORS, body-size, method, timeout, routed-model, and sanitized-error behavior;
 - deterministic HTTP analysis;
-- bounded Ollama health, response, and control-preservation behavior.
+- shared complete-response provider timeout and size boundaries;
+- bounded Ollama health, response, and control-preservation behavior;
+- free-only OpenRouter model enforcement, health, headers, structured output, routed-model provenance, response validation, and control preservation.
 
 ## Browser workspace boundary
 
@@ -189,6 +217,6 @@ HarnessLab will provide:
 
 ## Repository status
 
-Repository governance, security boundaries, deploy-first CI, the interactive skeleton, durable browser projects, and the provider-neutral gateway are developed through pull requests.
+Repository governance, security boundaries, deploy-first CI, the interactive skeleton, durable browser projects, the provider-neutral gateway, Ollama, and a free-only OpenRouter adapter are developed through pull requests.
 
 No open-source license has been selected yet. Do not assume permission to copy, modify, or redistribute this repository's contents.

@@ -1,3 +1,8 @@
+import {
+  DEFAULT_OPENROUTER_FREE_MODEL,
+  normalizeFreeOpenRouterModel
+} from './providers/openrouter.mjs';
+
 const DEFAULT_ORIGINS = [
   'http://127.0.0.1:4173',
   'http://localhost:4173',
@@ -27,6 +32,14 @@ function normalizeHttpUrl(value, name) {
   return url.toString().replace(/\/$/, '');
 }
 
+function normalizeOptionalText(value, fallback, { name, maximum }) {
+  const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback;
+  if (/\r|\n/.test(candidate) || candidate.length > maximum) {
+    throw new Error(`${name} must be one line with ${maximum} characters or fewer.`);
+  }
+  return candidate;
+}
+
 function parseOrigins(value) {
   const origins = value
     ? value.split(',').map((origin) => origin.trim()).filter(Boolean)
@@ -45,8 +58,8 @@ function parseOrigins(value) {
 
 export function loadGatewayConfig(environment = process.env) {
   const provider = (environment.HARNESSLAB_PROVIDER || 'deterministic').trim().toLowerCase();
-  if (!['deterministic', 'ollama'].includes(provider)) {
-    throw new Error('HARNESSLAB_PROVIDER must be deterministic or ollama.');
+  if (!['deterministic', 'ollama', 'openrouter'].includes(provider)) {
+    throw new Error('HARNESSLAB_PROVIDER must be deterministic, ollama, or openrouter.');
   }
 
   return Object.freeze({
@@ -78,6 +91,20 @@ export function loadGatewayConfig(environment = process.env) {
       baseUrl: normalizeHttpUrl(environment.OLLAMA_BASE_URL || 'http://127.0.0.1:11434', 'OLLAMA_BASE_URL'),
       model: (environment.OLLAMA_DEFAULT_MODEL || '').trim(),
       temperature: 0.2
+    }),
+    openrouter: Object.freeze({
+      apiKey: typeof environment.OPENROUTER_API_KEY === 'string' ? environment.OPENROUTER_API_KEY.trim() : '',
+      model: normalizeFreeOpenRouterModel(environment.OPENROUTER_DEFAULT_MODEL || DEFAULT_OPENROUTER_FREE_MODEL),
+      temperature: 0.2,
+      maxTokens: 1200,
+      httpReferer: normalizeHttpUrl(
+        environment.OPENROUTER_HTTP_REFERER || 'https://yashumani.github.io/harnesslab/',
+        'OPENROUTER_HTTP_REFERER'
+      ),
+      appTitle: normalizeOptionalText(environment.OPENROUTER_APP_TITLE, 'HarnessLab', {
+        name: 'OPENROUTER_APP_TITLE',
+        maximum: 100
+      })
     })
   });
 }

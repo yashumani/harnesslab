@@ -23,6 +23,12 @@ function safeReason(value) {
     : null;
 }
 
+function safeModel(value, fallback = null) {
+  return typeof value === 'string' && value.trim() && value.length <= 200 && !/[\r\n]/.test(value)
+    ? value.trim()
+    : fallback;
+}
+
 function applyBaseHeaders(response, requestId) {
   response.setHeader('cache-control', 'no-store');
   response.setHeader('content-type', 'application/json; charset=utf-8');
@@ -193,12 +199,13 @@ export function createGatewayHandler({
         sendJson(response, 200, {
           requestId,
           service: 'harnesslab-gateway',
-          version: '0.1.0',
+          version: '0.2.0',
           status: health.available ? 'ok' : 'degraded',
           provider: {
             name: provider.name,
             model: provider.model,
             liveModel: provider.liveModel,
+            freeOnly: Boolean(provider.freeOnly),
             configured: Boolean(health.configured),
             available: Boolean(health.available),
             reason: safeReason(health.reason)
@@ -219,12 +226,14 @@ export function createGatewayHandler({
         const providerResponse = await runProviderWithTimeout(provider, requirement, config.requestTimeoutMs);
         assertHarnessResult(providerResponse?.result);
         const latencyMs = elapsedMs(startedAt, now);
+        const routedModel = safeModel(providerResponse.model, provider.model);
         sendJson(response, 200, {
           requestId,
           provider: {
             name: provider.name,
-            model: provider.model,
-            liveModel: provider.liveModel
+            model: routedModel,
+            liveModel: provider.liveModel,
+            freeOnly: Boolean(provider.freeOnly)
           },
           result: providerResponse.result,
           metadata: {
@@ -235,7 +244,9 @@ export function createGatewayHandler({
         logger.info('gateway.analysis.complete', {
           requestId,
           provider: provider.name,
+          model: routedModel,
           liveModel: provider.liveModel,
+          freeOnly: Boolean(provider.freeOnly),
           latencyMs
         });
         return;

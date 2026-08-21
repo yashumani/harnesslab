@@ -9,6 +9,8 @@ test('uses local deterministic defaults without credentials', () => {
   assert.equal(config.port, 8787);
   assert.equal(config.provider, 'deterministic');
   assert.equal(config.ollama.model, '');
+  assert.equal(config.openrouter.apiKey, '');
+  assert.equal(config.openrouter.model, 'openrouter/free');
   assert.ok(config.allowedOrigins.includes('https://yashumani.github.io'));
 });
 
@@ -30,10 +32,43 @@ test('parses explicit Ollama and origin settings', () => {
   assert.equal(config.ollama.model, 'qwen-test');
 });
 
+test('parses an explicitly configured free-only OpenRouter provider', () => {
+  const config = loadGatewayConfig({
+    HARNESSLAB_PROVIDER: 'openrouter',
+    OPENROUTER_API_KEY: 'test-openrouter-key',
+    OPENROUTER_DEFAULT_MODEL: 'example/model:free',
+    OPENROUTER_HTTP_REFERER: 'https://example.test/harnesslab/',
+    OPENROUTER_APP_TITLE: 'HarnessLab Test'
+  });
+  assert.equal(config.provider, 'openrouter');
+  assert.equal(config.openrouter.apiKey, 'test-openrouter-key');
+  assert.equal(config.openrouter.model, 'example/model:free');
+  assert.equal(config.openrouter.httpReferer, 'https://example.test/harnesslab');
+  assert.equal(config.openrouter.appTitle, 'HarnessLab Test');
+  assert.equal(JSON.stringify({ ...config.openrouter, apiKey: '[redacted]' }).includes('test-openrouter-key'), false);
+});
+
+test('rejects paid or ambiguous OpenRouter model routes', () => {
+  assert.throws(
+    () => loadGatewayConfig({
+      HARNESSLAB_PROVIDER: 'openrouter',
+      OPENROUTER_DEFAULT_MODEL: 'vendor/paid-model'
+    }),
+    /only openrouter\/free or an explicit OpenRouter model ending in :free/
+  );
+  assert.throws(
+    () => loadGatewayConfig({
+      HARNESSLAB_PROVIDER: 'openrouter',
+      OPENROUTER_DEFAULT_MODEL: 'free'
+    }),
+    /valid OpenRouter model identifier/
+  );
+});
+
 test('rejects unsupported providers and invalid numeric limits', () => {
   assert.throws(
     () => loadGatewayConfig({ HARNESSLAB_PROVIDER: 'unknown' }),
-    /deterministic or ollama/
+    /deterministic, ollama, or openrouter/
   );
   assert.throws(
     () => loadGatewayConfig({ HARNESSLAB_GATEWAY_PORT: '70000' }),
@@ -53,5 +88,16 @@ test('rejects origins with paths and URLs containing credentials', () => {
   assert.throws(
     () => loadGatewayConfig({ OLLAMA_BASE_URL: 'http://user:secret@localhost:11434' }),
     /must not contain credentials/
+  );
+  assert.throws(
+    () => loadGatewayConfig({ OPENROUTER_HTTP_REFERER: 'https://user:secret@example.test' }),
+    /must not contain credentials/
+  );
+});
+
+test('rejects header-injection characters in OpenRouter application metadata', () => {
+  assert.throws(
+    () => loadGatewayConfig({ OPENROUTER_APP_TITLE: 'HarnessLab\r\nInjected: value' }),
+    /one line/
   );
 });
