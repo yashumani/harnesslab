@@ -59,3 +59,11 @@ test('retains responsive, focus, reduced-motion, and critic-console boundaries',
   assert.match(theme, /--critic-violet: #ccb8eb/);
   assert.match(theme, /--critic-amber: #f9e893/);
 });
+
+test('has a balanced stylesheet structure and bounded override scope', () => {
+  const openings = [...theme.matchAll(/\{/g)].length;
+  const closings = [...theme.matchAll(/\}/g)].length;
+  assert.equal(openings, closings);
+  assert.ok(theme.length < 75000, 'theme layer should remain reviewable and bounded');
+  assert.equal((theme.match(/!important/g) || []).length, 11, 'only critic custom-property overrides may use !important');
+});
