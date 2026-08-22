@@ -25,10 +25,14 @@ test('console clearly exposes the worker lifecycle and non-capabilities', () => 
   assert.match(consoleModule, /No tools/);
   assert.match(consoleModule, /No child agents/);
   assert.match(consoleModule, /No external actions/);
-  assert.match(consoleModule, /temporary_agent/);
+  assert.match(consoleModule, /Executed temporary intelligence/);
+  assert.match(consoleModule, /Lifecycle artifact/);
+  assert.match(consoleModule, /Accepted findings/);
+  assert.match(consoleModule, /Rejected findings/);
   assert.match(consoleModule, /Save local version/);
   assert.match(consoleModule, /harnesslab:analysis-result/);
   assert.match(consoleModule, /harnesslab:critic-result/);
+  assert.match(consoleModule, /freshWorkspaceStore/);
   assert.equal(/OPENROUTER_API_KEY|OLLAMA_DEFAULT_MODEL|authorization\s*:/i.test(consoleModule), false);
 });
 
