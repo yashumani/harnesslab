@@ -69,8 +69,8 @@ jobs:
           grep -q '@media (max-width: 760px)' /tmp/harnesslab-neuronest-theme.css
           grep -q 'prefers-reduced-motion' /tmp/harnesslab-neuronest-theme.css
 
-          if grep -Eqi 'cdn\.dribbble\.com|userupload|url\([[:space:]]*["'"']?https?://' /tmp/harnesslab-neuronest-theme.css; then
-            echo 'The original theme must not embed external Dribbble artwork or remote background assets.'
+          if grep -Eqi 'https?://|cdn\.dribbble\.com|userupload|data:image/' /tmp/harnesslab-neuronest-theme.css; then
+            echo 'The original theme must not embed remote artwork or data-image assets.'
             exit 1
           fi
 
