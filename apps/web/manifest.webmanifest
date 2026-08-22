@@ -1,11 +1,12 @@
 {
-  "name": "HarnessLab",
+  "name": "HarnessLab Agent Harness Control Room",
   "short_name": "HarnessLab",
-  "description": "Deploy-first agent harness architecture studio.",
+  "description": "Deploy-first agent harness architecture studio with bounded temporary intelligence, evidence, and policy controls.",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#050a12",
-  "theme_color": "#07111f",
+  "background_color": "#F3E5CF",
+  "theme_color": "#F3E5CF",
   "icons": [
     {
       "src": "./favicon.svg",
