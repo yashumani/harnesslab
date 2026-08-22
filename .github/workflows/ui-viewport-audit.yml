@@ -36,33 +36,58 @@ jobs:
         run: npm run check
 
       - name: Render and audit desktop, tablet, and phone
+        id: viewport-audit
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           mkdir -p ui-audit
+          failures=0
 
           browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
           if [[ -z "$browser" ]]; then
-            echo 'No Chromium-compatible browser is available on the runner.'
+            echo 'No Chromium-compatible browser is available on the runner.' | tee ui-audit/failure.txt
             exit 1
           fi
 
           python3 -m http.server 4173 --directory apps/web > /tmp/harnesslab-ui-http.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
+          ready=false
           for attempt in {1..30}; do
             if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              ready=true
               break
             fi
             sleep 0.25
           done
+          if [[ "$ready" != 'true' ]]; then
+            echo 'The local browser application did not start.' | tee ui-audit/failure.txt
+            exit 1
+          fi
+
+          require_pattern() {
+            local file="$1"
+            local pattern="$2"
+            local message="$3"
+            if ! grep -q -- "$pattern" "$file"; then
+              echo "FAIL: ${message}" | tee -a ui-audit/audit.log
+              failures=$((failures + 1))
+            else
+              echo "PASS: ${message}" >> ui-audit/audit.log
+            fi
+          }
 
           render_viewport() {
             local name="$1"
             local size="$2"
             local url="http://127.0.0.1:4173/?ui-audit=1&viewport=${name}"
-            echo "Auditing ${name} at ${size}"
-            "$browser" \
+            local html="ui-audit/${name}.html"
+            local png="ui-audit/${name}.png"
+            local metrics="ui-audit/${name}-metrics.txt"
+
+            echo "Auditing ${name} at ${size}" | tee -a ui-audit/audit.log
+
+            if ! "$browser" \
               --headless=new \
               --no-sandbox \
               --disable-gpu \
@@ -71,9 +96,13 @@ jobs:
               --force-device-scale-factor=1 \
               --window-size="$size" \
               --virtual-time-budget=5000 \
-              --screenshot="ui-audit/${name}.png" \
-              "$url"
-            "$browser" \
+              --screenshot="$png" \
+              "$url"; then
+              echo "FAIL: ${name} screenshot render failed" | tee -a ui-audit/audit.log
+              failures=$((failures + 1))
+            fi
+
+            if ! "$browser" \
               --headless=new \
               --no-sandbox \
               --disable-gpu \
@@ -81,16 +110,33 @@ jobs:
               --window-size="$size" \
               --virtual-time-budget=5000 \
               --dump-dom \
-              "$url" > "ui-audit/${name}.html"
+              "$url" > "$html"; then
+              echo "FAIL: ${name} DOM render failed" | tee -a ui-audit/audit.log
+              failures=$((failures + 1))
+              return
+            fi
 
-            test -s "ui-audit/${name}.png"
-            grep -q 'data-ui-audit="complete"' "ui-audit/${name}.html"
-            grep -q 'data-ui-overflow="false"' "ui-audit/${name}.html"
-            grep -q 'data-ui-undersized="0"' "ui-audit/${name}.html"
-            grep -q 'data-ui-clipped="0"' "ui-audit/${name}.html"
-            grep -q '<harnesslab-theme-picker' "ui-audit/${name}.html"
-            grep -q 'development-cycle' "ui-audit/${name}.html"
-            grep -q 'harnesslab:analysis-result' "ui-audit/${name}.html" || true
+            {
+              echo "viewport=${name}"
+              echo "window=${size}"
+              grep -oE 'data-ui-(audit|overflow|undersized|clipped|layout)="[^"]*"' "$html" || true
+              sed -n 's/.*<output id="ui-audit-output"[^>]*>\([^<]*\)<\/output>.*/audit-output=\1/p' "$html" || true
+            } | tee "$metrics"
+
+            if [[ ! -s "$png" ]]; then
+              echo "FAIL: ${name} screenshot is empty" | tee -a ui-audit/audit.log
+              failures=$((failures + 1))
+            else
+              echo "PASS: ${name} screenshot rendered" >> ui-audit/audit.log
+            fi
+
+            require_pattern "$html" 'data-ui-audit="complete"' "${name} browser audit completed"
+            require_pattern "$html" 'data-ui-overflow="false"' "${name} has no horizontal page overflow"
+            require_pattern "$html" 'data-ui-undersized="0"' "${name} has no undersized visible primary controls"
+            require_pattern "$html" 'data-ui-clipped="0"' "${name} has no clipped visible primary controls"
+            require_pattern "$html" '<harnesslab-theme-picker' "${name} mounts the palette picker"
+            require_pattern "$html" 'development-cycle' "${name} mounts the development-cycle strip"
+            require_pattern "$html" 'class="app-shell"' "${name} mounts the React application shell"
           }
 
           render_viewport desktop 1440,1100
@@ -98,18 +144,33 @@ jobs:
           render_viewport phone 390,844
 
           {
+            echo
+            echo "failures=${failures}"
+          } | tee -a ui-audit/audit.log
+
+          {
             echo '### HarnessLab responsive UI audit'
             echo
-            echo '- Desktop 1440×1100: no overflow, clipping, or undersized primary controls'
-            echo '- Tablet 1024×900: no overflow, clipping, or undersized primary controls'
-            echo '- Phone 390×844: no overflow, clipping, or undersized primary controls'
-            echo '- Screenshots retained in the `harnesslab-ui-audit` artifact'
+            if [[ "$failures" -eq 0 ]]; then
+              echo '- Desktop 1440×1100: no overflow, clipping, or undersized primary controls'
+              echo '- Tablet 1024×900: no overflow, clipping, or undersized primary controls'
+              echo '- Phone 390×844: no overflow, clipping, or undersized primary controls'
+            else
+              echo "- The browser audit found ${failures} validation failure(s)."
+              echo '- Exact metrics and screenshots are retained in the workflow artifact.'
+            fi
+            echo '- Screenshots and rendered DOM are retained in the `harnesslab-ui-audit` artifact.'
           } >> "$GITHUB_STEP_SUMMARY"
 
+          if [[ "$failures" -ne 0 ]]; then
+            exit 1
+          fi
+
       - name: Upload rendered UI evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: harnesslab-ui-audit
           path: ui-audit
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
