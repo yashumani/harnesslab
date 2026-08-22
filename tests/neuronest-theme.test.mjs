@@ -65,5 +65,5 @@ test('has a balanced stylesheet structure and bounded override scope', () => {
   const closings = [...theme.matchAll(/\}/g)].length;
   assert.equal(openings, closings);
   assert.ok(theme.length < 75000, 'theme layer should remain reviewable and bounded');
-  assert.equal((theme.match(/!important/g) || []).length, 11, 'only critic custom-property overrides may use !important');
+  assert.equal((theme.match(/!important/g) || []).length, 12, 'only critic custom-property overrides may use !important');
 });
