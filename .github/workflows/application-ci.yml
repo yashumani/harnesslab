@@ -31,7 +31,7 @@ jobs:
       - name: Run unit, integration, syntax, and deployment-contract checks
         run: npm run check
 
-      - name: Smoke test the no-build React browser application
+      - name: Smoke test the no-build React anomaly-product UI
         shell: bash
         run: |
           set -euo pipefail
@@ -44,15 +44,49 @@ jobs:
             fi
             sleep 0.25
           done
-          grep -q 'HarnessLab' /tmp/harnesslab-index.html
+
+          grep -q 'HarnessLab — Agent Harness Control Room' /tmp/harnesslab-index.html
           grep -q 'id="root"' /tmp/harnesslab-index.html
           grep -q 'react@18.3.1' /tmp/harnesslab-index.html
+          grep -q 'href="./anomaly-ui.css"' /tmp/harnesslab-index.html
+          grep -q 'href="./anomaly-mobile.css"' /tmp/harnesslab-index.html
+          grep -q 'src="./anomaly-shell.js"' /tmp/harnesslab-index.html
           grep -q 'src="./critic-console.js"' /tmp/harnesslab-index.html
+          if grep -q 'neuronest-theme.css' /tmp/harnesslab-index.html; then
+            echo 'The superseded NeuroNest theme must not remain active.'
+            exit 1
+          fi
+
           curl --fail --silent http://127.0.0.1:4173/app.js > /tmp/harnesslab-app.js
           grep -q 'ReactDomRuntime.createRoot' /tmp/harnesslab-app.js
           grep -q 'No provider keys in browser' /tmp/harnesslab-app.js
+
+          curl --fail --silent http://127.0.0.1:4173/anomaly-shell.js > /tmp/harnesslab-anomaly-shell.js
+          grep -q 'HARNESSLAB_PALETTES' /tmp/harnesslab-anomaly-shell.js
+          grep -q 'harnesslab.anomaly-palette.v1' /tmp/harnesslab-anomaly-shell.js
+          grep -q 'Design → Validate → Deploy → Observe → Improve' /tmp/harnesslab-anomaly-shell.js
+          test "$(grep -o "id: '[^']*'" /tmp/harnesslab-anomaly-shell.js | wc -l | tr -d ' ')" = '18'
+          grep -q 'data.uiOverflow' /tmp/harnesslab-anomaly-shell.js
+          grep -q 'data.uiUndersized' /tmp/harnesslab-anomaly-shell.js
+          grep -q 'data.uiClipped' /tmp/harnesslab-anomaly-shell.js
+
           curl --fail --silent http://127.0.0.1:4173/react-app.css > /tmp/harnesslab-react.css
           grep -q '.architecture-map' /tmp/harnesslab-react.css
+
+          curl --fail --silent http://127.0.0.1:4173/anomaly-ui.css > /tmp/harnesslab-anomaly.css
+          grep -q 'yashumani/drill-down-anamoly' /tmp/harnesslab-anomaly.css
+          grep -q 'AGENT HARNESS CONTROL ROOM' /tmp/harnesslab-anomaly.css
+          grep -q 'html\[data-theme="cfo-navy"\]' /tmp/harnesslab-anomaly.css
+          grep -q '.theme-picker-menu' /tmp/harnesslab-anomaly.css
+          grep -q '.development-cycle' /tmp/harnesslab-anomaly.css
+          grep -q 'harnesslab-critic-console' /tmp/harnesslab-anomaly.css
+
+          curl --fail --silent http://127.0.0.1:4173/anomaly-mobile.css > /tmp/harnesslab-anomaly-mobile.css
+          grep -q '@media (max-width: 640px)' /tmp/harnesslab-anomaly-mobile.css
+          grep -q '@media (max-width: 390px)' /tmp/harnesslab-anomaly-mobile.css
+          grep -q 'min-height: 44px' /tmp/harnesslab-anomaly-mobile.css
+          grep -q 'overflow-x: clip' /tmp/harnesslab-anomaly-mobile.css
+
           curl --fail --silent http://127.0.0.1:4173/critic-console.js > /tmp/harnesslab-critic.js
           grep -q 'HarnessLabCriticConsole' /tmp/harnesslab-critic.js
           grep -q 'One worker' /tmp/harnesslab-critic.js
