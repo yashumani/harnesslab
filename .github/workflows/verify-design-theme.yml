@@ -1,6 +1,9 @@
 name: Verify HarnessLab Design Theme
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/verify-design-theme.yml'
   workflow_run:
     workflows:
       - Deploy HarnessLab to Pages
@@ -12,13 +15,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-harnesslab-design-theme
+  group: verify-harnesslab-design-theme-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   verify-theme:
     name: Design / live
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
