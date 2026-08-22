@@ -1,0 +1,115 @@
+name: UI Viewport Audit
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/ui-viewport-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harnesslab-ui-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  viewport-audit:
+    name: UI / desktop-tablet-phone
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Validate application contracts
+        run: npm run check
+
+      - name: Render and audit desktop, tablet, and phone
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ui-audit
+
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "$browser" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.'
+            exit 1
+          fi
+
+          python3 -m http.server 4173 --directory apps/web > /tmp/harnesslab-ui-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          render_viewport() {
+            local name="$1"
+            local size="$2"
+            local url="http://127.0.0.1:4173/?ui-audit=1&viewport=${name}"
+            echo "Auditing ${name} at ${size}"
+            "$browser" \
+              --headless=new \
+              --no-sandbox \
+              --disable-gpu \
+              --disable-dev-shm-usage \
+              --hide-scrollbars \
+              --force-device-scale-factor=1 \
+              --window-size="$size" \
+              --virtual-time-budget=5000 \
+              --screenshot="ui-audit/${name}.png" \
+              "$url"
+            "$browser" \
+              --headless=new \
+              --no-sandbox \
+              --disable-gpu \
+              --disable-dev-shm-usage \
+              --window-size="$size" \
+              --virtual-time-budget=5000 \
+              --dump-dom \
+              "$url" > "ui-audit/${name}.html"
+
+            test -s "ui-audit/${name}.png"
+            grep -q 'data-ui-audit="complete"' "ui-audit/${name}.html"
+            grep -q 'data-ui-overflow="false"' "ui-audit/${name}.html"
+            grep -q 'data-ui-undersized="0"' "ui-audit/${name}.html"
+            grep -q 'data-ui-clipped="0"' "ui-audit/${name}.html"
+            grep -q '<harnesslab-theme-picker' "ui-audit/${name}.html"
+            grep -q 'development-cycle' "ui-audit/${name}.html"
+            grep -q 'harnesslab:analysis-result' "ui-audit/${name}.html" || true
+          }
+
+          render_viewport desktop 1440,1100
+          render_viewport tablet 1024,900
+          render_viewport phone 390,844
+
+          {
+            echo '### HarnessLab responsive UI audit'
+            echo
+            echo '- Desktop 1440×1100: no overflow, clipping, or undersized primary controls'
+            echo '- Tablet 1024×900: no overflow, clipping, or undersized primary controls'
+            echo '- Phone 390×844: no overflow, clipping, or undersized primary controls'
+            echo '- Screenshots retained in the `harnesslab-ui-audit` artifact'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload rendered UI evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-ui-audit
+          path: ui-audit
+          if-no-files-found: error
+          retention-days: 30
