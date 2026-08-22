@@ -207,6 +207,7 @@ mountShellEnhancements();
 globalThis.addEventListener('harnesslab:analysis-result', () => setCycle('validate'));
 globalThis.addEventListener('harnesslab:critic-result', () => setCycle('observe'));
 document.addEventListener('click', (event) => {
+  if (!(event.target instanceof Element)) return;
   if (event.target.closest('.analyze-button, .run-mini-button, .primary-cta')) setCycle('design');
   if (event.target.closest('[data-action="run"]')) setCycle('validate');
 });
@@ -236,11 +237,12 @@ function runViewportAudit() {
     return rect.left < -1 || rect.right > viewportWidth + 1;
   });
   const overflow = pageWidth > viewportWidth + 1;
-  document.body.dataset.uiAudit = 'complete';
-  document.body.dataset.uiOverflow = String(overflow);
-  document.body.dataset.uiUndersized = String(undersized.length);
-  document.body.dataset.uiClipped = String(clipped.length);
-  document.body.dataset.uiLayout = document.documentElement.dataset.layout || 'desktop';
+  const data = document.body.dataset;
+  data.uiAudit = 'complete';
+  data.uiOverflow = String(overflow);
+  data.uiUndersized = String(undersized.length);
+  data.uiClipped = String(clipped.length);
+  data.uiLayout = document.documentElement.dataset.layout || 'desktop';
 
   let output = document.getElementById('ui-audit-output');
   if (!output) {
@@ -250,7 +252,7 @@ function runViewportAudit() {
     document.body.appendChild(output);
   }
   output.textContent = JSON.stringify({
-    layout: document.body.dataset.uiLayout,
+    layout: data.uiLayout,
     viewportWidth,
     pageWidth,
     overflow,
