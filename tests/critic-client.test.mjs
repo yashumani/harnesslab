@@ -35,7 +35,7 @@ function reviewedEnvelope() {
     requestId: 'REQ-critic-1',
     provider: { name: 'deterministic', model: null, liveModel: false, freeOnly: false },
     result,
-    worker: result.temporaryWorker,
+    worker: structuredClone(result.temporaryWorker),
     metadata: { latencyMs: 8, usage: null, completed: true }
   };
 }
