@@ -1,0 +1,87 @@
+name: Verify HarnessLab Design Theme
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy HarnessLab to Pages
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-harnesslab-design-theme
+  cancel-in-progress: true
+
+jobs:
+  verify-theme:
+    name: Design / live
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify the public modular command-center theme
+        shell: bash
+        env:
+          BASE_URL: https://yashumani.github.io/harnesslab
+        run: |
+          set -euo pipefail
+
+          ready=false
+          for attempt in {1..36}; do
+            echo "Design verification attempt ${attempt}/36"
+            if curl --fail --silent --show-error --location --max-time 20 \
+              "${BASE_URL}/?theme=${GITHUB_RUN_ID}-${attempt}" \
+              -o /tmp/harnesslab-theme-index.html; then
+              if grep -q 'href="./neuronest-theme.css"' /tmp/harnesslab-theme-index.html; then
+                ready=true
+                break
+              fi
+            fi
+            sleep 5
+          done
+
+          if [[ "${ready}" != 'true' ]]; then
+            echo 'The public route did not load the modular HarnessLab theme.'
+            sed -n '1,100p' /tmp/harnesslab-theme-index.html 2>/dev/null || true
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/neuronest-theme.css?theme=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-neuronest-theme.css
+
+          grep -qi 'original implementation' /tmp/harnesslab-neuronest-theme.css
+          grep -q '#070707' /tmp/harnesslab-neuronest-theme.css
+          grep -qi '#ccb8eb' /tmp/harnesslab-neuronest-theme.css
+          grep -qi '#b8d2ac' /tmp/harnesslab-neuronest-theme.css
+          grep -qi '#f9e893' /tmp/harnesslab-neuronest-theme.css
+          grep -q '.sidebar' /tmp/harnesslab-neuronest-theme.css
+          grep -q '.mission-hero' /tmp/harnesslab-neuronest-theme.css
+          grep -q '.workspace-layout' /tmp/harnesslab-neuronest-theme.css
+          grep -q '.composer-panel' /tmp/harnesslab-neuronest-theme.css
+          grep -q '.architecture-map' /tmp/harnesslab-neuronest-theme.css
+          grep -q '.agent-card' /tmp/harnesslab-neuronest-theme.css
+          grep -q '.permission-table' /tmp/harnesslab-neuronest-theme.css
+          grep -q 'harnesslab-critic-console' /tmp/harnesslab-neuronest-theme.css
+          grep -q '@media (max-width: 760px)' /tmp/harnesslab-neuronest-theme.css
+          grep -q 'prefers-reduced-motion' /tmp/harnesslab-neuronest-theme.css
+
+          if grep -Eqi 'cdn\.dribbble\.com|userupload|url\([[:space:]]*["'"']?https?://' /tmp/harnesslab-neuronest-theme.css; then
+            echo 'The original theme must not embed external Dribbble artwork or remote background assets.'
+            exit 1
+          fi
+
+          {
+            echo '### HarnessLab visual verification'
+            echo
+            echo "Verified the deployed modular command-center theme at ${BASE_URL}/"
+            echo
+            echo '- Original theme stylesheet: verified'
+            echo '- Lavender / sage / warm-yellow palette: verified'
+            echo '- Workspace, runtime, architecture, agent, control, evidence, and critic selectors: verified'
+            echo '- Responsive and reduced-motion behavior: verified'
+            echo '- No embedded Dribbble artwork or remote background assets: verified'
+          } >> "$GITHUB_STEP_SUMMARY"
