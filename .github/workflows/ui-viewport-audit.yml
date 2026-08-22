@@ -80,12 +80,13 @@ jobs:
           render_viewport() {
             local name="$1"
             local size="$2"
+            local scale="$3"
             local url="http://127.0.0.1:4173/?ui-audit=1&viewport=${name}"
             local html="ui-audit/${name}.html"
             local png="ui-audit/${name}.png"
             local metrics="ui-audit/${name}-metrics.txt"
 
-            echo "Auditing ${name} at ${size}" | tee -a ui-audit/audit.log
+            echo "Auditing ${name} at ${size} with device scale ${scale}" | tee -a ui-audit/audit.log
 
             if ! "$browser" \
               --headless=new \
@@ -93,7 +94,7 @@ jobs:
               --disable-gpu \
               --disable-dev-shm-usage \
               --hide-scrollbars \
-              --force-device-scale-factor=1 \
+              --force-device-scale-factor="$scale" \
               --window-size="$size" \
               --virtual-time-budget=5000 \
               --screenshot="$png" \
@@ -107,6 +108,7 @@ jobs:
               --no-sandbox \
               --disable-gpu \
               --disable-dev-shm-usage \
+              --force-device-scale-factor="$scale" \
               --window-size="$size" \
               --virtual-time-budget=5000 \
               --dump-dom \
@@ -119,6 +121,7 @@ jobs:
             {
               echo "viewport=${name}"
               echo "window=${size}"
+              echo "device-scale=${scale}"
               grep -oE 'data-ui-(audit|overflow|undersized|clipped|layout)="[^"]*"' "$html" || true
               sed -n 's/.*<output id="ui-audit-output"[^>]*>\([^<]*\)<\/output>.*/audit-output=\1/p' "$html" || true
             } | tee "$metrics"
@@ -131,6 +134,7 @@ jobs:
             fi
 
             require_pattern "$html" 'data-ui-audit="complete"' "${name} browser audit completed"
+            require_pattern "$html" "data-ui-layout=\"${name}\"" "${name} activates the intended responsive layout"
             require_pattern "$html" 'data-ui-overflow="false"' "${name} has no horizontal page overflow"
             require_pattern "$html" 'data-ui-undersized="0"' "${name} has no undersized visible primary controls"
             require_pattern "$html" 'data-ui-clipped="0"' "${name} has no clipped visible primary controls"
@@ -139,9 +143,11 @@ jobs:
             require_pattern "$html" 'class="app-shell"' "${name} mounts the React application shell"
           }
 
-          render_viewport desktop 1440,1100
-          render_viewport tablet 1024,900
-          render_viewport phone 390,844
+          render_viewport desktop 1440,1100 1
+          render_viewport tablet 1024,900 1
+          # Chromium enforces a roughly 500px minimum outer window. A 1.25
+          # device scale turns that clamped physical width into a ~390px CSS viewport.
+          render_viewport phone 390,844 1.25
 
           {
             echo
@@ -154,7 +160,7 @@ jobs:
             if [[ "$failures" -eq 0 ]]; then
               echo '- Desktop 1440×1100: no overflow, clipping, or undersized primary controls'
               echo '- Tablet 1024×900: no overflow, clipping, or undersized primary controls'
-              echo '- Phone 390×844: no overflow, clipping, or undersized primary controls'
+              echo '- Phone ~390 CSS pixels: no overflow, clipping, or undersized primary controls'
             else
               echo "- The browser audit found ${failures} validation failure(s)."
               echo '- Exact metrics and screenshots are retained in the workflow artifact.'
