@@ -1,0 +1,97 @@
+/*
+  Final layout guard for the active anomaly-product shell.
+  This neutralizes responsive rules from the former fixed-sidebar visual without
+  changing any functional component or browser/runtime contract.
+*/
+
+/* The active app bar is always in document flow; it is never an off-canvas drawer. */
+.sidebar,
+.sidebar-open {
+  width: 100% !important;
+  max-width: 100% !important;
+  transform: none !important;
+  transition: none !important;
+}
+
+/* Base navigation buttons formerly inherited width:100%, creating a horizontal rail. */
+.nav-button {
+  width: auto;
+  max-width: 100%;
+}
+
+/* Keep the editorial capability strip inside the hero's own layout box. */
+.mission-hero::after {
+  left: -3px;
+  width: calc(100% + 6px);
+}
+
+@media (max-width: 1240px) {
+  .sidebar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .sidebar > harnesslab-theme-picker {
+    grid-column: auto;
+    justify-self: end;
+  }
+
+  .nav-stack {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    position: sticky;
+    top: 6px;
+    display: grid;
+  }
+
+  .main-content {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .sidebar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .sidebar > harnesslab-theme-picker {
+    grid-column: 2;
+  }
+
+  .nav-stack {
+    grid-column: 1 / -1;
+  }
+
+  .nav-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  /* The prior mobile shell forced this control to 36px wide. */
+  .run-mini-button {
+    width: auto !important;
+    min-width: 42px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand theme"
+      "nav nav";
+  }
+
+  .sidebar-top { grid-area: brand; }
+  .sidebar > harnesslab-theme-picker { grid-area: theme; }
+  .nav-stack { grid-area: nav; }
+
+  .mission-hero::after {
+    left: -3px;
+    width: calc(100% + 6px);
+  }
+}
