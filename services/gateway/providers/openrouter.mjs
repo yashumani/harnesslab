@@ -7,6 +7,10 @@ import {
   createArchitecturePrompt,
   parseArchitectureSupplement
 } from './architecture-guidance.mjs';
+import {
+  createCriticPrompt,
+  parseCriticReview
+} from '../temporary-critic.mjs';
 import { fetchProviderJson } from './provider-http.mjs';
 
 export const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
@@ -113,7 +117,7 @@ export function createOpenRouterProvider({
     }
   }
 
-  async function analyze(requirement, { signal = null } = {}) {
+  async function requestJsonPrompt(prompt, { signal = null, system }) {
     if (!configured) throw new ProviderUnavailableError('OpenRouter is selected but OPENROUTER_API_KEY is not configured.');
     const { response, payload } = await fetchProviderJson({
       fetchImpl,
@@ -129,11 +133,8 @@ export function createOpenRouterProvider({
           response_format: { type: 'json_object' },
           usage: { include: true },
           messages: [
-            {
-              role: 'system',
-              content: 'You are a bounded architecture-analysis worker. Follow the requested JSON schema and never claim external execution.'
-            },
-            { role: 'user', content: createArchitecturePrompt(requirement) }
+            { role: 'system', content: system },
+            { role: 'user', content: prompt }
           ]
         })
       },
@@ -154,23 +155,46 @@ export function createOpenRouterProvider({
         : new ProviderResponseError(`OpenRouter rejected the request with HTTP ${response.status}.`);
     }
 
-    const supplement = parseArchitectureSupplement(extractMessageContent(payload), { providerLabel: 'OpenRouter' });
-    const routedModel = responseModel(payload, normalizedModel);
     return {
-      result: applyArchitectureSupplement(requirement, supplement, {
-        providerLabel: 'OpenRouter',
-        runIdPrefix: 'OPENROUTER',
-        mode: 'Live OpenRouter free-model analysis with deterministic HarnessLab controls',
-        traceDetail: `OpenRouter supplied bounded architecture guidance through a free route (${routedModel}); deterministic policy, artifact, and evaluation controls remained authoritative.`,
-        constraint: 'OpenRouter may advise architecture and questions through a free model route, but deterministic HarnessLab controls remain authoritative.',
-        verdictLabel: 'OpenRouter-assisted'
-      }),
-      model: routedModel,
+      content: extractMessageContent(payload),
+      model: responseModel(payload, normalizedModel),
       usage: {
         promptTokens: Number.isFinite(payload?.usage?.prompt_tokens) ? payload.usage.prompt_tokens : null,
         completionTokens: Number.isFinite(payload?.usage?.completion_tokens) ? payload.usage.completion_tokens : null,
         totalTokens: Number.isFinite(payload?.usage?.total_tokens) ? payload.usage.total_tokens : null
       }
+    };
+  }
+
+  async function analyze(requirement, { signal = null } = {}) {
+    const response = await requestJsonPrompt(createArchitecturePrompt(requirement), {
+      signal,
+      system: 'You are a bounded architecture-analysis worker. Follow the requested JSON schema and never claim external execution.'
+    });
+    const supplement = parseArchitectureSupplement(response.content, { providerLabel: 'OpenRouter' });
+    return {
+      result: applyArchitectureSupplement(requirement, supplement, {
+        providerLabel: 'OpenRouter',
+        runIdPrefix: 'OPENROUTER',
+        mode: 'Live OpenRouter free-model analysis with deterministic HarnessLab controls',
+        traceDetail: `OpenRouter supplied bounded architecture guidance through a free route (${response.model}); deterministic policy, artifact, and evaluation controls remained authoritative.`,
+        constraint: 'OpenRouter may advise architecture and questions through a free model route, but deterministic HarnessLab controls remain authoritative.',
+        verdictLabel: 'OpenRouter-assisted'
+      }),
+      model: response.model,
+      usage: response.usage
+    };
+  }
+
+  async function critique(context, { signal = null } = {}) {
+    const response = await requestJsonPrompt(createCriticPrompt(context), {
+      signal,
+      system: 'You are one temporary architecture critic. You have no tools, no external access, no child-agent permission, and one structured response only.'
+    });
+    return {
+      review: parseCriticReview(response.content, { providerLabel: 'OpenRouter critic' }),
+      model: response.model,
+      usage: response.usage
     };
   }
 
@@ -181,6 +205,7 @@ export function createOpenRouterProvider({
     configured,
     freeOnly: true,
     health,
-    analyze
+    analyze,
+    critique
   };
 }

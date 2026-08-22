@@ -25,7 +25,7 @@ const config = loadGatewayConfig();
 const provider = createConfiguredProvider(config);
 const logger = createLogger();
 const server = createGatewayServer({ config, provider, logger });
-server.requestTimeout = config.requestTimeoutMs + 5000;
+server.requestTimeout = Math.max(config.requestTimeoutMs, config.criticTimeoutMs) + 5000;
 server.headersTimeout = Math.min(server.requestTimeout, 10000);
 server.keepAliveTimeout = 5000;
 server.maxRequestsPerSocket = 100;
@@ -38,8 +38,9 @@ server.listen(config.port, config.host, () => {
     provider: provider.name,
     model: provider.model,
     liveModel: provider.liveModel,
-    freeOnly: Boolean(provider.freeOnly),
     configured: provider.configured,
+    temporaryCritic: typeof provider.critique === 'function',
+    criticTimeoutMs: config.criticTimeoutMs,
     allowedOriginCount: config.allowedOrigins.length
   });
 });

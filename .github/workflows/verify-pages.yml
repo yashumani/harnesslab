@@ -37,7 +37,8 @@ jobs:
               -o /tmp/harnesslab-live-index.html; then
               if grep -q 'HarnessLab — Agent Systems Command Center' /tmp/harnesslab-live-index.html \
                 && grep -q 'id="root"' /tmp/harnesslab-live-index.html \
-                && grep -q 'react@18.3.1' /tmp/harnesslab-live-index.html; then
+                && grep -q 'react@18.3.1' /tmp/harnesslab-live-index.html \
+                && grep -q 'src="./critic-console.js"' /tmp/harnesslab-live-index.html; then
                 ready=true
                 break
               fi
@@ -46,8 +47,8 @@ jobs:
           done
 
           if [[ "${ready}" != 'true' ]]; then
-            echo 'The public route did not serve the expected React command center.'
-            sed -n '1,80p' /tmp/harnesslab-live-index.html 2>/dev/null || true
+            echo 'The public route did not serve the expected React command center and temporary critic console.'
+            sed -n '1,100p' /tmp/harnesslab-live-index.html 2>/dev/null || true
             exit 1
           fi
 
@@ -66,6 +67,43 @@ jobs:
           grep -q '@media (max-width: 760px)' /tmp/harnesslab-live-react.css
 
           curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/critic-console.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-live-critic.js
+          grep -q 'HarnessLabCriticConsole' /tmp/harnesslab-live-critic.js
+          grep -q 'One worker' /tmp/harnesslab-live-critic.js
+          grep -q 'One provider call' /tmp/harnesslab-live-critic.js
+          grep -q 'No tools' /tmp/harnesslab-live-critic.js
+          grep -q 'No child agents' /tmp/harnesslab-live-critic.js
+          grep -q 'No external actions' /tmp/harnesslab-live-critic.js
+          grep -q 'harnesslab:critic-result' /tmp/harnesslab-live-critic.js
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/critic-client.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-live-critic-client.js
+          grep -q '/v1/critique' /tmp/harnesslab-live-critic-client.js
+          grep -q 'WORKER_REQUIRES_GATEWAY' /tmp/harnesslab-live-critic-client.js
+          if grep -qi 'authorization:' /tmp/harnesslab-live-critic-client.js; then
+            echo 'The public critic client must not construct provider authorization.'
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/temporary-worker-contract.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-live-worker-contract.js
+          grep -q 'callBudget must equal 1' /tmp/harnesslab-live-worker-contract.js
+          grep -q 'tools must be an empty array' /tmp/harnesslab-live-worker-contract.js
+          grep -q 'childSpawning must be false' /tmp/harnesslab-live-worker-contract.js
+          grep -q 'externalActions must be false' /tmp/harnesslab-live-worker-contract.js
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/critic-console.css?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-live-critic.css
+          grep -q '.critic-drawer' /tmp/harnesslab-live-critic.css
+          grep -q '.finding-card' /tmp/harnesslab-live-critic.css
+          grep -q '@media (max-width: 760px)' /tmp/harnesslab-live-critic.css
+          grep -q 'prefers-reduced-motion' /tmp/harnesslab-live-critic.css
+
+          curl --fail --silent --show-error --location --max-time 20 \
             "${BASE_URL}/manifest.webmanifest?verify=${GITHUB_RUN_ID}" \
             -o /tmp/harnesslab-live-manifest.json
           grep -q 'HarnessLab' /tmp/harnesslab-live-manifest.json
@@ -77,6 +115,8 @@ jobs:
             echo
             echo '- HTML mount and pinned React runtime: verified'
             echo '- React application contract: verified'
+            echo '- Executable bounded critic console: verified'
+            echo '- One-worker / one-call / no-tools contract: verified'
             echo '- Architecture and responsive visual CSS: verified'
             echo '- Web app manifest: verified'
           } >> "$GITHUB_STEP_SUMMARY"

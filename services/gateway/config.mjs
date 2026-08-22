@@ -76,6 +76,11 @@ export function loadGatewayConfig(environment = process.env) {
       maximum: 300000,
       name: 'HARNESSLAB_GATEWAY_TIMEOUT_MS'
     }),
+    criticTimeoutMs: parseInteger(environment.HARNESSLAB_CRITIC_TIMEOUT_MS, 20000, {
+      minimum: 500,
+      maximum: 120000,
+      name: 'HARNESSLAB_CRITIC_TIMEOUT_MS'
+    }),
     healthTimeoutMs: parseInteger(environment.HARNESSLAB_HEALTH_TIMEOUT_MS, 3000, {
       minimum: 250,
       maximum: 30000,
@@ -85,6 +90,11 @@ export function loadGatewayConfig(environment = process.env) {
       minimum: 1024,
       maximum: 1048576,
       name: 'HARNESSLAB_MAX_BODY_BYTES'
+    }),
+    criticMaxBodyBytes: parseInteger(environment.HARNESSLAB_CRITIC_MAX_BODY_BYTES, 262144, {
+      minimum: 16384,
+      maximum: 1048576,
+      name: 'HARNESSLAB_CRITIC_MAX_BODY_BYTES'
     }),
     allowedOrigins: Object.freeze(parseOrigins(environment.HARNESSLAB_ALLOWED_ORIGINS)),
     ollama: Object.freeze({

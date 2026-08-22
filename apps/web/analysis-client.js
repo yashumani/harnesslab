@@ -28,6 +28,19 @@ function sanitizeMessage(value, fallback = 'The analysis gateway request failed.
   return value.replace(/\s+/g, ' ').trim().slice(0, 240);
 }
 
+function emitAnalysisResult(result) {
+  try {
+    if (typeof globalThis.CustomEvent === 'function' && typeof globalThis.dispatchEvent === 'function') {
+      globalThis.dispatchEvent(new CustomEvent('harnesslab:analysis-result', {
+        detail: cloneJson(result)
+      }));
+    }
+  } catch {
+    // Event delivery is optional. The returned result remains authoritative.
+  }
+  return result;
+}
+
 export class AnalysisGatewayError extends Error {
   constructor(message, { code = 'GATEWAY_ERROR', status = null, cause = null } = {}) {
     super(sanitizeMessage(message));
@@ -281,19 +294,25 @@ export function createAnalysisClient({
     const settings = normalizeRuntimeSettings(inputSettings, {
       strictGatewayUrl: candidateMode !== RuntimeModes.BROWSER
     });
-    if (settings.mode === RuntimeModes.BROWSER) return browserAnalysis(requirement, settings);
 
-    try {
-      return await gatewayAnalysis(requirement, settings);
-    } catch (error) {
-      const gatewayError = error instanceof AnalysisGatewayError
-        ? error
-        : new AnalysisGatewayError('Gateway analysis failed.', { cause: error });
-      if (settings.mode === RuntimeModes.AUTOMATIC) {
-        return browserAnalysis(requirement, settings, gatewayError);
+    let result;
+    if (settings.mode === RuntimeModes.BROWSER) {
+      result = await browserAnalysis(requirement, settings);
+    } else {
+      try {
+        result = await gatewayAnalysis(requirement, settings);
+      } catch (error) {
+        const gatewayError = error instanceof AnalysisGatewayError
+          ? error
+          : new AnalysisGatewayError('Gateway analysis failed.', { cause: error });
+        if (settings.mode === RuntimeModes.AUTOMATIC) {
+          result = await browserAnalysis(requirement, settings, gatewayError);
+        } else {
+          throw gatewayError;
+        }
       }
-      throw gatewayError;
     }
+    return emitAnalysisResult(result);
   }
 
   async function checkHealth(inputSettings = {}) {
@@ -318,7 +337,8 @@ export function createAnalysisClient({
         configured: Boolean(payload.provider.configured),
         available: Boolean(payload.provider.available),
         liveModel: Boolean(payload.provider.liveModel)
-      }
+      },
+      capabilities: isRecord(payload.capabilities) ? cloneJson(payload.capabilities) : {}
     };
   }
 

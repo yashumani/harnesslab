@@ -4,18 +4,25 @@ HarnessLab is an AI-assisted agent harness builder and adaptive swarm runtime fo
 
 > **Agents are disposable. Harnesses are durable. Knowledge is retained as structured artifacts.**
 
-## Current deploy-first slices
+## Live application
 
-HarnessLab follows a **deploy-first development cycle**. The static application already provides a complete visible path:
+The advanced no-build React command center is deployed at:
+
+```text
+https://yashumani.github.io/harnesslab/
+```
+
+HarnessLab follows a **deploy-first development cycle**. The current visible path is:
 
 ```text
 Project
   → analysis runtime
   → requirement interpretation
   → harness architecture
-  → bounded temporary-agent plan
+  → bounded subagent plan
   → permissions and artifacts
   → trace and evaluation
+  → optional executed architecture critic
   → immutable saved version
 ```
 
@@ -24,14 +31,35 @@ The deployed UI includes:
 - deterministic requirement interpretation and architecture selection;
 - workflow, single-agent, or temporary-subagent guidance;
 - MCP, A2A, retrieval, and typed-function recommendations;
-- bounded temporary-agent contracts;
+- bounded planned-agent contracts;
 - permissions and approval gates;
 - structured artifact identifiers;
 - execution trace and evaluation summary;
 - browser-local projects, immutable harness versions, restore, and JSON backup;
-- provider-neutral runtime controls with browser, automatic-fallback, and gateway-required modes.
+- provider-neutral runtime controls with browser, automatic-fallback, and gateway-required modes;
+- a live **Temporary Architecture Critic** console for one bounded gateway worker.
 
-The optional gateway adds server-side provider seams without breaking the static experience:
+## First executed temporary worker
+
+The architecture critic is the first subagent HarnessLab can actually execute. It is deliberately constrained:
+
+```text
+One worker
+One provider call
+No tools
+No child agents
+No external actions
+Fixed deadline
+Structured review only
+```
+
+The critic receives a whitelist-only context envelope containing the requirement, architecture, protocols, permissions, constraints, unresolved questions, bounded planned-agent summaries, artifacts, and evaluation. It does not receive provider credentials, the full browser conversation, filesystem access, databases, MCP clients, A2A peers, deployment credentials, or production data.
+
+A finding is applied only when it passes the typed schema, has `medium` or `high` severity, and has confidence of at least `0.70`. Rejected findings remain in the review artifact for traceability. The deterministic merge cannot weaken permissions, denied actions, approval requirements, stages, protocols, existing constraints, artifacts, or evaluation requirements.
+
+Browser-deterministic mode remains analysis-only and executes no worker. To run the critic, start the gateway and select **Automatic** or **Gateway required** in the application.
+
+## Provider-neutral gateway
 
 ```text
 Browser analysis client
@@ -42,15 +70,9 @@ Browser analysis client
        └─ explicitly configured OpenRouter free-only provider
 ```
 
-The browser never accepts provider keys. Gateway responses and browser fallback both pass the shared harness-result validator before rendering or saving.
+The browser never accepts provider keys. Gateway responses, browser fallback, and temporary-worker results pass shared validators before rendering or saving.
 
-No slice currently executes MCP tools, A2A peers, arbitrary code, external writes, production changes, or remote temporary workers. Browser project data is local to the current browser profile and is not encrypted cloud storage or cross-device synchronization.
-
-Expected public URL after GitHub Pages is configured for GitHub Actions:
-
-```text
-https://yashumani.github.io/harnesslab/
-```
+The current slice does not execute MCP tools, A2A peers, arbitrary code, files, databases, external writes, deployments, purchases, or production changes. Browser project data is local to the current browser profile and is not encrypted cloud storage or cross-device synchronization.
 
 ## Requirements
 
@@ -91,7 +113,28 @@ The safe default provider is deterministic. In the browser, set the gateway URL 
 http://127.0.0.1:8787
 ```
 
-Then select **Automatic** or **Gateway required** and use **Test connection**.
+Then select **Automatic** or **Gateway required**, use **Test connection**, generate a plan, and open the critic launcher in the lower-right corner.
+
+The gateway exposes:
+
+```text
+GET  /health
+POST /v1/analyze
+POST /v1/critique
+```
+
+The critic endpoint accepts only a validated harness result. The request cannot choose a provider, select a model, add tools, or expand the worker task.
+
+### Temporary critic limits
+
+Defaults:
+
+```bash
+export HARNESSLAB_CRITIC_TIMEOUT_MS=20000
+export HARNESSLAB_CRITIC_MAX_BODY_BYTES=262144
+```
+
+The compiled worker context itself is limited to 48 KiB. Every provider receives a one-call budget.
 
 ### Enable an installed Ollama model
 
@@ -104,11 +147,11 @@ export OLLAMA_DEFAULT_MODEL=<installed-local-model-name>
 npm run gateway
 ```
 
-Ollama supplies a bounded architecture supplement. Deterministic HarnessLab permissions, stages, artifact requirements, safety constraints, and validation remain authoritative. An unavailable or invalid model response becomes an explicit error; only browser **Automatic** mode may use and record deterministic fallback.
+Ollama can supply bounded architecture guidance and one bounded critic review. Deterministic HarnessLab permissions, stages, artifact requirements, safety constraints, finding acceptance, and validation remain authoritative.
 
 ### Enable OpenRouter free models
 
-OpenRouter still requires an API key. Put it only in the gateway environment:
+OpenRouter requires an API key even for free routes. Put it only in the gateway environment:
 
 ```bash
 export HARNESSLAB_PROVIDER=openrouter
@@ -124,9 +167,7 @@ openrouter/free
 <provider/model:free>
 ```
 
-A paid or ambiguous model identifier is rejected at gateway startup. This slice has no paid-model override.
-
-The adapter validates the key without returning its metadata, uses the fixed official OpenRouter HTTPS API origin, requests structured JSON, records the actual routed model when available, and keeps deterministic HarnessLab permissions, stages, artifacts, safety constraints, and evaluations authoritative.
+A paid or ambiguous model identifier is rejected at gateway startup. There is no paid-model override. The adapter uses the fixed official OpenRouter HTTPS API origin, validates the key without returning its metadata, requests structured JSON, records the actual routed model when available, and preserves deterministic HarnessLab controls.
 
 No OpenRouter account, key, credit purchase, or live request is created automatically by this repository.
 
@@ -137,7 +178,7 @@ docker build -f services/gateway/Dockerfile -t harnesslab-gateway .
 docker run --rm -p 8787:8787 harnesslab-gateway
 ```
 
-The container runs as a non-root user and starts with the deterministic provider. Pass any Ollama or OpenRouter settings at runtime; never bake a credential into the image.
+The container runs as a non-root user and starts with the deterministic provider. Pass Ollama or OpenRouter settings at runtime; never bake a credential into the image.
 
 ## Test
 
@@ -147,16 +188,22 @@ npm run check
 
 The suite covers:
 
-- deterministic architecture routing and temporary-agent limits;
+- deterministic architecture routing and planned-agent limits;
 - permission, A2A, artifact, trace, and evaluation contracts;
 - browser workspace recovery, immutable versions, retention, and backup export;
-- shared harness-result validation;
+- shared harness-result and temporary-worker validation;
 - browser runtime modes, fallback evidence, and gateway identity checks;
+- minimum critic context compilation;
+- one-worker, one-call, no-tools, no-child, and no-external-action enforcement;
+- strict critic review parsing and deterministic finding acceptance;
+- retained timeout and failure evidence;
+- browser critic-client and console contracts;
 - gateway CORS, body-size, method, timeout, routed-model, and sanitized-error behavior;
-- deterministic HTTP analysis;
-- shared complete-response provider timeout and size boundaries;
-- bounded Ollama health, response, and control-preservation behavior;
-- free-only OpenRouter model enforcement, health, headers, structured output, routed-model provenance, response validation, and control preservation.
+- deterministic HTTP analysis and critic execution;
+- bounded Ollama and OpenRouter analysis/critic behavior;
+- free-only OpenRouter enforcement;
+- non-root container build;
+- live GitHub Pages assets and responsive critic visual.
 
 ## Browser workspace boundary
 
@@ -166,28 +213,37 @@ Harness projects currently use versioned browser storage:
 Project
   → full requirement
   → validated harness result
+  → optional reviewed result
   → immutable saved version
   → local version history
   → optional JSON backup
 ```
 
-Do not enter credentials, API keys, production data, or secrets. Exported backups can contain the full requirement text and should be handled as private files.
+Do not enter credentials, API keys, production data, or secrets. Exported backups can contain the full requirement and reviewed artifacts and should be handled as private files.
 
 ## Deploy
 
-The GitHub Pages workflow publishes only `apps/web` after validation. Before the first deployment, a repository administrator must select:
+The GitHub Pages workflow validates and publishes only `apps/web`:
 
 ```text
-Settings → Pages → Build and deployment → Source → GitHub Actions
+.github/workflows/deploy-pages.yml
 ```
 
-Every relevant push to `main` then runs `.github/workflows/deploy-pages.yml`. The optional gateway is independently container-deployable; it is not hosted by GitHub Pages.
+After deployment, a separate workflow tests the actual public HTML, modules, worker contract, critic visual, and manifest:
+
+```text
+.github/workflows/verify-pages.yml
+```
+
+The gateway is independently container-deployable; GitHub Pages hosts only the browser application.
 
 Architecture details:
 
 - [`docs/architecture/DEPLOY_FIRST.md`](docs/architecture/DEPLOY_FIRST.md)
 - [`docs/architecture/LOCAL_WORKSPACE.md`](docs/architecture/LOCAL_WORKSPACE.md)
 - [`docs/architecture/ANALYSIS_GATEWAY.md`](docs/architecture/ANALYSIS_GATEWAY.md)
+- [`docs/architecture/NO_BUILD_REACT.md`](docs/architecture/NO_BUILD_REACT.md)
+- [`docs/architecture/TEMPORARY_CRITIC.md`](docs/architecture/TEMPORARY_CRITIC.md)
 
 ## Product direction
 
@@ -217,6 +273,6 @@ HarnessLab will provide:
 
 ## Repository status
 
-Repository governance, security boundaries, deploy-first CI, the interactive skeleton, durable browser projects, the provider-neutral gateway, Ollama, and a free-only OpenRouter adapter are developed through pull requests.
+Repository governance, deploy-first CI, the live no-build React command center, durable browser projects, provider-neutral gateway, Ollama, free-only OpenRouter, and one executable bounded temporary critic are developed through pull requests.
 
 No open-source license has been selected yet. Do not assume permission to copy, modify, or redistribute this repository's contents.
