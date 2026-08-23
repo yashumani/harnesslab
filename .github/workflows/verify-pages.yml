@@ -1,9 +1,6 @@
 name: Verify HarnessLab Pages
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/verify-pages.yml'
   workflow_run:
     workflows:
       - Deploy HarnessLab to Pages
@@ -15,13 +12,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-harnesslab-pages-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'live' }}
+  group: verify-harnesslab-pages-live
   cancel-in-progress: true
 
 jobs:
   verify-live:
     name: Pages / live
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -42,6 +39,7 @@ jobs:
                 && grep -q 'id="root"' /tmp/harnesslab-live-index.html \
                 && grep -q 'react@18.3.1' /tmp/harnesslab-live-index.html \
                 && grep -q 'href="./taskzen-theme.css"' /tmp/harnesslab-live-index.html \
+                && grep -q 'href="./taskzen-responsive.css"' /tmp/harnesslab-live-index.html \
                 && grep -q 'src="./taskzen-shell.js"' /tmp/harnesslab-live-index.html \
                 && grep -q 'src="./critic-console.js"' /tmp/harnesslab-live-index.html; then
                 ready=true
@@ -84,6 +82,13 @@ jobs:
           grep -q '@media (max-width: 1120px)' /tmp/harnesslab-live-taskzen.css
           grep -q '@media (max-width: 760px)' /tmp/harnesslab-live-taskzen.css
           grep -q 'prefers-reduced-motion' /tmp/harnesslab-live-taskzen.css
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/taskzen-responsive.css?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-live-taskzen-responsive.css
+          grep -q '.result-tabs' /tmp/harnesslab-live-taskzen-responsive.css
+          grep -q 'grid-template-columns: repeat(2, minmax(0, 1fr))' /tmp/harnesslab-live-taskzen-responsive.css
+          grep -q 'white-space: normal' /tmp/harnesslab-live-taskzen-responsive.css
 
           curl --fail --silent --show-error --location --max-time 20 \
             "${BASE_URL}/taskzen-shell.js?verify=${GITHUB_RUN_ID}" \
@@ -148,7 +153,7 @@ jobs:
             echo
             echo "Verified the deployed Taskzen-inspired no-build React workspace at ${BASE_URL}/"
             echo
-            echo '- Product HTML, pinned React runtime, and Taskzen shell: verified'
+            echo '- Product HTML, pinned React runtime, Taskzen theme, responsive layer, and shell: verified'
             echo '- Light indigo/teal product design and responsive selectors: verified'
             echo '- Superseded theme reference: absent'
             echo '- Executable bounded critic console: verified'
