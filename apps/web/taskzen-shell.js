@@ -1,16 +1,171 @@
 const DESIGN_ID = 'taskzen';
 const AUDIT_QUERY = 'ui-audit';
+const DRAWER_BREAKPOINT = 1120;
+const NAVIGATION_ID = 'harnesslab-navigation';
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',');
+
+let drawerWasOpen = false;
+let focusRestoreTarget = null;
+let navigationObserver = null;
+let synchronizingDrawer = false;
 
 document.documentElement.dataset.design = DESIGN_ID;
 
 function layoutForWidth(width) {
   if (width <= 760) return 'phone';
-  if (width <= 1120) return 'tablet';
+  if (width <= DRAWER_BREAKPOINT) return 'tablet';
   return 'desktop';
 }
 
+function isDrawerLayout() {
+  return (globalThis.innerWidth || 1280) <= DRAWER_BREAKPOINT;
+}
+
+function setInert(element, inert) {
+  if (!element) return;
+  element.inert = inert;
+  if (inert) element.setAttribute('inert', '');
+  else element.removeAttribute('inert');
+}
+
+function visibleFocusableElements(container) {
+  if (!container) return [];
+  return [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter((element) => {
+    if (element.closest('[inert]')) return false;
+    const style = getComputedStyle(element);
+    return style.display !== 'none'
+      && style.visibility !== 'hidden'
+      && Number(style.opacity) !== 0
+      && element.getClientRects().length > 0;
+  });
+}
+
+function drawerElements() {
+  return {
+    sidebar: document.querySelector('.sidebar'),
+    main: document.getElementById('main-content') || document.querySelector('.main-content'),
+    menu: document.querySelector('.menu-button')
+  };
+}
+
+function syncDrawerAccessibility({ manageFocus = true } = {}) {
+  if (synchronizingDrawer) return false;
+  synchronizingDrawer = true;
+
+  try {
+    const { sidebar, main, menu } = drawerElements();
+    if (!sidebar || !main || !menu) return false;
+
+    sidebar.id = NAVIGATION_ID;
+    menu.setAttribute('aria-controls', NAVIGATION_ID);
+
+    const drawerLayout = isDrawerLayout();
+    const open = drawerLayout && sidebar.classList.contains('sidebar-open');
+    menu.setAttribute('aria-expanded', String(open));
+
+    if (!drawerLayout) {
+      setInert(sidebar, false);
+      setInert(main, false);
+      sidebar.removeAttribute('aria-hidden');
+      sidebar.removeAttribute('aria-modal');
+      sidebar.removeAttribute('role');
+      drawerWasOpen = false;
+      focusRestoreTarget = null;
+      return true;
+    }
+
+    if (open) {
+      if (!drawerWasOpen) focusRestoreTarget = menu;
+      setInert(sidebar, false);
+      setInert(main, true);
+      sidebar.removeAttribute('aria-hidden');
+      sidebar.setAttribute('role', 'dialog');
+      sidebar.setAttribute('aria-modal', 'true');
+
+      if (!drawerWasOpen && manageFocus) {
+        globalThis.setTimeout(() => {
+          const closeButton = sidebar.querySelector('.sidebar-close');
+          const firstFocusable = visibleFocusableElements(sidebar)[0];
+          (closeButton || firstFocusable)?.focus({ preventScroll: true });
+        }, 0);
+      }
+    } else {
+      const focusWasInsideDrawer = sidebar.contains(document.activeElement);
+      setInert(sidebar, true);
+      setInert(main, false);
+      sidebar.setAttribute('aria-hidden', 'true');
+      sidebar.removeAttribute('aria-modal');
+      sidebar.removeAttribute('role');
+
+      if ((drawerWasOpen || focusWasInsideDrawer) && manageFocus) {
+        const target = focusRestoreTarget || menu;
+        globalThis.setTimeout(() => target?.focus({ preventScroll: true }), 0);
+      }
+    }
+
+    drawerWasOpen = open;
+    return true;
+  } finally {
+    synchronizingDrawer = false;
+  }
+}
+
+function observeNavigationDrawer() {
+  const { sidebar } = drawerElements();
+  if (!sidebar) return false;
+  navigationObserver?.disconnect();
+  navigationObserver = new MutationObserver((mutations) => {
+    if (mutations.some((mutation) => mutation.type === 'attributes' && mutation.attributeName === 'class')) {
+      syncDrawerAccessibility();
+    }
+  });
+  navigationObserver.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+  syncDrawerAccessibility({ manageFocus: false });
+  return true;
+}
+
+function handleDrawerKeyboard(event) {
+  const { sidebar } = drawerElements();
+  if (!sidebar || !isDrawerLayout() || !sidebar.classList.contains('sidebar-open')) return;
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    sidebar.querySelector('.sidebar-close')?.click();
+    return;
+  }
+
+  if (event.key !== 'Tab') return;
+  const focusable = visibleFocusableElements(sidebar);
+  if (!focusable.length) {
+    event.preventDefault();
+    return;
+  }
+
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  const active = document.activeElement;
+
+  if (event.shiftKey && (active === first || !sidebar.contains(active))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (active === last || !sidebar.contains(active))) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+document.addEventListener('keydown', handleDrawerKeyboard);
+
 function applyLayout() {
   document.documentElement.dataset.layout = layoutForWidth(globalThis.innerWidth || 1280);
+  syncDrawerAccessibility();
 }
 
 applyLayout();
@@ -23,7 +178,7 @@ function isVisible(element) {
   if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
   if (rect.width <= 0 || rect.height <= 0) return false;
   const drawer = element.closest('.sidebar');
-  if (drawer && globalThis.innerWidth <= 1120 && !drawer.classList.contains('sidebar-open')) return false;
+  if (drawer && isDrawerLayout() && !drawer.classList.contains('sidebar-open')) return false;
   return true;
 }
 
@@ -40,6 +195,28 @@ function describeElement(element) {
     x: Math.round(rect.x),
     width: Math.round(rect.width),
     height: Math.round(rect.height)
+  };
+}
+
+function drawerAudit() {
+  const { sidebar, main, menu } = drawerElements();
+  if (!sidebar || !main || !menu) return null;
+  const drawerLayout = isDrawerLayout();
+  const open = drawerLayout && sidebar.classList.contains('sidebar-open');
+  return {
+    drawerLayout,
+    open,
+    inert: sidebar.inert,
+    ariaHidden: sidebar.getAttribute('aria-hidden'),
+    role: sidebar.getAttribute('role'),
+    ariaModal: sidebar.getAttribute('aria-modal'),
+    backgroundInert: main.inert,
+    menuExpanded: menu.getAttribute('aria-expanded'),
+    menuControls: menu.getAttribute('aria-controls'),
+    tabbableDrawerControls: visibleFocusableElements(sidebar).length,
+    activeElementClass: typeof document.activeElement?.className === 'string'
+      ? document.activeElement.className
+      : document.activeElement?.tagName || ''
   };
 }
 
@@ -98,13 +275,15 @@ function runViewportAudit() {
     overflow,
     controls: controls.length,
     undersized: undersized.map(describeElement),
-    clipped: clipped.map(describeElement)
+    clipped: clipped.map(describeElement),
+    drawer: drawerAudit()
   });
 }
 
 function markReady() {
   if (!document.querySelector('.app-shell')) return false;
   document.body.dataset.taskzenReady = 'true';
+  observeNavigationDrawer();
   if (new URLSearchParams(location.search).get(AUDIT_QUERY) === '1') {
     globalThis.setTimeout(runViewportAudit, 1200);
   }
