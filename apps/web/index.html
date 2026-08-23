@@ -1,19 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-design="taskzen" data-layout="desktop">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#070707">
-  <meta name="description" content="HarnessLab is a deploy-first AI agent harness architecture studio with one bounded executable temporary critic, provider-neutral analysis, evidence, and policy controls.">
-  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#F7F8FC">
+  <meta name="description" content="HarnessLab is a deploy-first AI agent harness builder with one bounded executable temporary critic, provider-neutral analysis, evidence, and policy controls.">
+  <meta name="color-scheme" content="light">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:* https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
-  <title>HarnessLab — Agent Systems Command Center</title>
+  <title>HarnessLab — AI Agent Harness Builder</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="stylesheet" href="./react-app.css">
-  <!-- Original modular command-center theme inspired by NeuroNest on Dribbble; no source artwork is embedded. -->
-  <link rel="stylesheet" href="./neuronest-theme.css">
+  <!-- Original product UI based on high-level patterns from the free Taskzen Framer template. No template source or artwork is embedded. -->
+  <link rel="stylesheet" href="./taskzen-theme.css">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -22,18 +22,19 @@
       <div class="boot-mark">H</div>
       <div>
         <strong>Starting HarnessLab</strong>
-        <span>Loading the modular no-build React command center…</span>
+        <span>Loading the no-build agent harness workspace…</span>
       </div>
     </div>
   </div>
   <noscript>
-    <div class="noscript-card">HarnessLab requires JavaScript to render the agent-systems command center.</div>
+    <div class="noscript-card">HarnessLab requires JavaScript to render the agent harness workspace.</div>
   </noscript>
 
   <!-- Pinned browser runtimes: no bundler, compiler, package install, or generated build output. -->
   <script crossorigin="anonymous" src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
   <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
   <script crossorigin="anonymous" src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+  <script type="module" src="./taskzen-shell.js"></script>
   <script type="module" src="./critic-console.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
