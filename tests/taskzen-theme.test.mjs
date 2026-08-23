@@ -96,14 +96,15 @@ test('keeps accessibility, motion, and asset boundaries', () => {
 
 test('ships an executable viewport audit for all responsive modes', () => {
   assert.match(shell, /const DESIGN_ID = 'taskzen'/);
+  assert.match(shell, /const DRAWER_BREAKPOINT = 1120/);
   assert.match(shell, /if \(width <= 760\) return 'phone'/);
-  assert.match(shell, /if \(width <= 1120\) return 'tablet'/);
+  assert.match(shell, /if \(width <= DRAWER_BREAKPOINT\) return 'tablet'/);
   assert.match(shell, /return 'desktop'/);
   assert.match(shell, /dataset\.uiOverflow/);
   assert.match(shell, /dataset\.uiUndersized/);
   assert.match(shell, /dataset\.uiClipped/);
   assert.match(shell, /ui-audit-output/);
-  assert.match(shell, /drawer && globalThis\.innerWidth <= 1120/);
+  assert.match(shell, /drawer && isDrawerLayout\(\)/);
 });
 
 test('keeps the replacement visual layers bounded and structurally valid', () => {
