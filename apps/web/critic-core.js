@@ -5,6 +5,7 @@ export const TEMPORARY_CRITIC_TASK = 'architecture-critic';
 export const MAX_CRITIC_FINDINGS = 6;
 export const MAX_CRITIC_CONTEXT_BYTES = 48 * 1024;
 
+const MAX_RESULT_COLLECTION_SIZE = 64;
 const ALLOWED_CATEGORIES = new Set([
   'missing_requirement',
   'reliability',
@@ -16,6 +17,19 @@ const ALLOWED_CATEGORIES = new Set([
 const ALLOWED_SEVERITIES = new Set(['low', 'medium', 'high']);
 const ACCEPTED_SEVERITIES = new Set(['medium', 'high']);
 const ACCEPTANCE_CONFIDENCE = 0.7;
+const CRITIC_TRACE_EVENTS = new Set([
+  'temporary_agent.context_compiled',
+  'temporary_agent.started',
+  'temporary_agent.completed',
+  'temporary_agent.failed',
+  'temporary_agent.timed_out',
+  'temporary_agent.cancelled',
+  'temporary_agent.review_applied'
+]);
+const CRITIC_CONSTRAINTS = Object.freeze([
+  'The temporary architecture critic had no tools, no external access, no child-agent permission, and a one-call budget.',
+  'Temporary critic findings cannot weaken permissions, denied actions, safety constraints, artifact requirements, evaluation, or traceability.'
+]);
 const textEncoder = new TextEncoder();
 
 export class CriticContractError extends Error {
@@ -70,12 +84,37 @@ function safeFailureMessage(value) {
     : 'The temporary critic did not complete.';
 }
 
+function uniqueBy(items, keySelector) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = keySelector(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function keepFirstAndMostRecent(items, limit) {
+  if (items.length <= limit) return items;
+  if (limit <= 0) return [];
+  if (limit === 1) return [items.at(-1)];
+  return [items[0], ...items.slice(1).slice(-(limit - 1))];
+}
+
 function appendTrace(result, entries) {
-  const trace = Array.isArray(result.trace) ? [...result.trace] : [];
+  const baseline = Array.isArray(result.trace)
+    ? result.trace.filter((entry) => !CRITIC_TRACE_EVENTS.has(entry?.event))
+    : [];
+  const trace = keepFirstAndMostRecent(
+    baseline,
+    Math.max(0, MAX_RESULT_COLLECTION_SIZE - entries.length)
+  );
   const responseIndex = trace.findIndex((entry) => entry?.event === 'response.ready');
   const insertionIndex = responseIndex >= 0 ? responseIndex : trace.length;
   trace.splice(insertionIndex, 0, ...entries);
-  result.trace = trace.map((entry, index) => ({ ...entry, sequence: index + 1 }));
+  result.trace = trace
+    .slice(0, MAX_RESULT_COLLECTION_SIZE)
+    .map((entry, index) => ({ ...entry, sequence: index + 1 }));
 }
 
 function upsertCriticDimension(result, review, acceptedFindings) {
@@ -86,9 +125,11 @@ function upsertCriticDimension(result, review, acceptedFindings) {
   }, 0);
   const confidencePenalty = Math.round((1 - normalizeConfidence(review?.confidence, 0.5)) * 12);
   const score = clampScore(100 - penalty - confidencePenalty);
-  const dimensions = Array.isArray(result.evaluation?.dimensions)
+  const existingDimensions = Array.isArray(result.evaluation?.dimensions)
     ? result.evaluation.dimensions.filter((dimension) => dimension?.name !== 'Architecture critique')
     : [];
+  const dimensions = uniqueBy(existingDimensions, (dimension) => dimension?.name)
+    .slice(0, MAX_RESULT_COLLECTION_SIZE - 1);
   dimensions.push({ name: 'Architecture critique', score });
   result.evaluation.dimensions = dimensions;
   result.evaluation.overall = clampScore(
@@ -101,6 +142,26 @@ function upsertCriticDimension(result, review, acceptedFindings) {
   } else {
     result.evaluation.verdict = 'Harness plan passed the bounded temporary architecture critique';
   }
+}
+
+function upsertReviewArtifact(artifacts, artifact) {
+  const baseline = uniqueBy(
+    (Array.isArray(artifacts) ? artifacts : []).filter((entry) =>
+      entry?.type !== 'TemporaryAgentReview' && entry?.id !== artifact.id
+    ),
+    (entry) => entry?.id
+  ).slice(0, MAX_RESULT_COLLECTION_SIZE - 1);
+  return [...baseline, artifact];
+}
+
+function mergeCriticConstraints(constraints) {
+  const baseline = [...new Set(
+    (Array.isArray(constraints) ? constraints : []).filter((constraint) =>
+      !CRITIC_CONSTRAINTS.includes(constraint)
+    )
+  )].slice(0, MAX_RESULT_COLLECTION_SIZE);
+  const available = Math.max(0, MAX_RESULT_COLLECTION_SIZE - baseline.length);
+  return [...baseline, ...CRITIC_CONSTRAINTS.slice(0, available)];
 }
 
 export function buildCriticContext(result) {
@@ -339,7 +400,8 @@ export function applyTemporaryCriticOutcome(result, {
     const criticQuestions = acceptedFindings
       .map((finding) => finding.question)
       .filter(Boolean);
-    next.unresolvedQuestions = [...new Set([...next.unresolvedQuestions, ...criticQuestions])].slice(0, 16);
+    next.unresolvedQuestions = [...new Set([...next.unresolvedQuestions, ...criticQuestions])]
+      .slice(0, MAX_RESULT_COLLECTION_SIZE);
     if (acceptedFindings.length) {
       const notes = acceptedFindings.slice(0, 3).map((finding) => finding.recommendation);
       next.recommendation = `${next.recommendation} Critic review: ${notes.join(' ')}`.slice(0, 11800);
@@ -347,18 +409,16 @@ export function applyTemporaryCriticOutcome(result, {
     upsertCriticDimension(next, review, acceptedFindings);
   }
 
-  next.artifacts = [
-    ...next.artifacts.filter((artifact) => artifact.id !== artifactId),
-    {
-      id: artifactId,
-      type: 'TemporaryAgentReview',
-      status: safeStatus === 'completed' ? 'Validated' : safeStatus.replace('_', ' '),
-      retained: true,
-      summary: review?.summary ?? safeFailureMessage(failureMessage),
-      acceptedFindings: acceptedFindings.length,
-      rejectedFindings: rejectedFindings.length
-    }
-  ];
+  const reviewArtifact = {
+    id: artifactId,
+    type: 'TemporaryAgentReview',
+    status: safeStatus === 'completed' ? 'Validated' : safeStatus.replace('_', ' '),
+    retained: true,
+    summary: review?.summary ?? safeFailureMessage(failureMessage),
+    acceptedFindings: acceptedFindings.length,
+    rejectedFindings: rejectedFindings.length
+  };
+  next.artifacts = upsertReviewArtifact(next.artifacts, reviewArtifact);
 
   const traceEntries = [
     {
@@ -372,7 +432,7 @@ export function applyTemporaryCriticOutcome(result, {
       sequence: 0,
       offset: '+worker',
       event: 'temporary_agent.started',
-      detail: `${TEMPORARY_CRITIC_ROLE} ${workerId} started with no tools, no child agents, one provider call, and a ${timeoutMs} ms deadline.`,
+      detail: `${TEMPORARY_CRITIC_ROLE} ${workerId} started with no tools, no child agents, one bounded critic invocation, and a ${timeoutMs} ms deadline.`,
       status: 'Complete'
     },
     {
@@ -395,12 +455,7 @@ export function applyTemporaryCriticOutcome(result, {
     }
   ];
   appendTrace(next, traceEntries);
-
-  next.constraints = [...new Set([
-    ...next.constraints,
-    'The temporary architecture critic had no tools, no external access, no child-agent permission, and a one-call budget.',
-    'Temporary critic findings cannot weaken permissions, denied actions, safety constraints, artifact requirements, evaluation, or traceability.'
-  ])];
+  next.constraints = mergeCriticConstraints(next.constraints);
 
   next.temporaryWorker = {
     id: workerId,
