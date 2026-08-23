@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Verify the public no-build React command center
+      - name: Verify the public no-build React product workspace
         shell: bash
         env:
           BASE_URL: https://yashumani.github.io/harnesslab
@@ -38,9 +38,11 @@ jobs:
             if curl --fail --silent --show-error --location --max-time 20 \
               "${BASE_URL}/?verify=${GITHUB_RUN_ID}-${attempt}" \
               -o /tmp/harnesslab-live-index.html; then
-              if grep -q 'HarnessLab — Agent Systems Command Center' /tmp/harnesslab-live-index.html \
+              if grep -q 'HarnessLab — AI Agent Harness Builder' /tmp/harnesslab-live-index.html \
                 && grep -q 'id="root"' /tmp/harnesslab-live-index.html \
                 && grep -q 'react@18.3.1' /tmp/harnesslab-live-index.html \
+                && grep -q 'href="./taskzen-theme.css"' /tmp/harnesslab-live-index.html \
+                && grep -q 'src="./taskzen-shell.js"' /tmp/harnesslab-live-index.html \
                 && grep -q 'src="./critic-console.js"' /tmp/harnesslab-live-index.html; then
                 ready=true
                 break
@@ -50,8 +52,13 @@ jobs:
           done
 
           if [[ "${ready}" != 'true' ]]; then
-            echo 'The public route did not serve the expected React command center and temporary critic console.'
-            sed -n '1,100p' /tmp/harnesslab-live-index.html 2>/dev/null || true
+            echo 'The public route did not serve the expected Taskzen-inspired React product workspace.'
+            sed -n '1,120p' /tmp/harnesslab-live-index.html 2>/dev/null || true
+            exit 1
+          fi
+
+          if grep -q 'neuronest-theme.css' /tmp/harnesslab-live-index.html; then
+            echo 'The public site still references the superseded theme.'
             exit 1
           fi
 
@@ -63,11 +70,33 @@ jobs:
           grep -qi 'planned, not executed' /tmp/harnesslab-live-app.js
 
           curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/taskzen-theme.css?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-live-taskzen.css
+          grep -qi -- '--bg-0: #f7f8fc' /tmp/harnesslab-live-taskzen.css
+          grep -qi -- '--cyan: #635bff' /tmp/harnesslab-live-taskzen.css
+          grep -qi -- '--teal: #0e9384' /tmp/harnesslab-live-taskzen.css
+          grep -q '.mission-hero' /tmp/harnesslab-live-taskzen.css
+          grep -q '.workspace-layout' /tmp/harnesslab-live-taskzen.css
+          grep -q '.runtime-panel' /tmp/harnesslab-live-taskzen.css
+          grep -q '.composer-panel' /tmp/harnesslab-live-taskzen.css
+          grep -q '.architecture-map' /tmp/harnesslab-live-taskzen.css
+          grep -q '.permission-table' /tmp/harnesslab-live-taskzen.css
+          grep -q '@media (max-width: 1120px)' /tmp/harnesslab-live-taskzen.css
+          grep -q '@media (max-width: 760px)' /tmp/harnesslab-live-taskzen.css
+          grep -q 'prefers-reduced-motion' /tmp/harnesslab-live-taskzen.css
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/taskzen-shell.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-live-taskzen-shell.js
+          grep -q "const DESIGN_ID = 'taskzen'" /tmp/harnesslab-live-taskzen-shell.js
+          grep -q 'dataset.uiOverflow' /tmp/harnesslab-live-taskzen-shell.js
+          grep -q 'ui-audit-output' /tmp/harnesslab-live-taskzen-shell.js
+
+          curl --fail --silent --show-error --location --max-time 20 \
             "${BASE_URL}/react-app.css?verify=${GITHUB_RUN_ID}" \
             -o /tmp/harnesslab-live-react.css
           grep -q '.architecture-map' /tmp/harnesslab-live-react.css
           grep -q '.agent-card-grid' /tmp/harnesslab-live-react.css
-          grep -q '@media (max-width: 760px)' /tmp/harnesslab-live-react.css
 
           curl --fail --silent --show-error --location --max-time 20 \
             "${BASE_URL}/critic-console.js?verify=${GITHUB_RUN_ID}" \
@@ -103,6 +132,7 @@ jobs:
             -o /tmp/harnesslab-live-critic.css
           grep -q '.critic-drawer' /tmp/harnesslab-live-critic.css
           grep -q '.finding-card' /tmp/harnesslab-live-critic.css
+          grep -qi -- '--critic-cyan: #635bff' /tmp/harnesslab-live-critic.css
           grep -q '@media (max-width: 760px)' /tmp/harnesslab-live-critic.css
           grep -q 'prefers-reduced-motion' /tmp/harnesslab-live-critic.css
 
@@ -110,16 +140,18 @@ jobs:
             "${BASE_URL}/manifest.webmanifest?verify=${GITHUB_RUN_ID}" \
             -o /tmp/harnesslab-live-manifest.json
           grep -q 'HarnessLab' /tmp/harnesslab-live-manifest.json
+          grep -qi '#F7F8FC' /tmp/harnesslab-live-manifest.json
+          grep -qi '#635BFF' /tmp/harnesslab-live-manifest.json
 
           {
             echo '### Live HarnessLab verification'
             echo
-            echo "Verified the deployed no-build React command center at ${BASE_URL}/"
+            echo "Verified the deployed Taskzen-inspired no-build React workspace at ${BASE_URL}/"
             echo
-            echo '- HTML mount and pinned React runtime: verified'
-            echo '- React application contract: verified'
+            echo '- Product HTML, pinned React runtime, and Taskzen shell: verified'
+            echo '- Light indigo/teal product design and responsive selectors: verified'
+            echo '- Superseded theme reference: absent'
             echo '- Executable bounded critic console: verified'
             echo '- One-worker / one-call / no-tools contract: verified'
-            echo '- Architecture and responsive visual CSS: verified'
             echo '- Web app manifest: verified'
           } >> "$GITHUB_STEP_SUMMARY"
