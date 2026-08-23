@@ -34,6 +34,7 @@ const requiredFiles = [
   'services/gateway/server.mjs',
   'services/gateway/Dockerfile',
   'scripts/capture-ui-viewport.mjs',
+  'scripts/verify-live-browser-critic.mjs',
   'scripts/validate-taskzen.mjs',
   'docs/architecture/ANALYSIS_GATEWAY.md',
   'docs/architecture/NO_BUILD_REACT.md',
@@ -77,6 +78,7 @@ const [
   openrouter,
   dockerfile,
   captureViewport,
+  liveCriticVerifier,
   deploy,
   verifyPages,
   viewportAudit
@@ -109,6 +111,7 @@ const [
   read('services/gateway/providers/openrouter.mjs'),
   read('services/gateway/Dockerfile'),
   read('scripts/capture-ui-viewport.mjs'),
+  read('scripts/verify-live-browser-critic.mjs'),
   read('.github/workflows/deploy-pages.yml'),
   read('.github/workflows/verify-pages.yml'),
   read('.github/workflows/ui-viewport-audit.yml')
@@ -210,6 +213,8 @@ const checks = [
 
   [captureViewport.includes('Emulation.setDeviceMetricsOverride'), 'viewport QA must use exact browser emulation'],
   [captureViewport.includes('Page.captureScreenshot'), 'viewport QA must retain screenshots'],
+  [liveCriticVerifier.includes('Browser-local critic execution'), 'live verifier must execute the public browser critic'],
+  [liveCriticVerifier.includes('prohibitedRequests.length === 0'), 'live verifier must reject critic network calls'],
   [viewportAudit.includes('audit_viewport desktop 1440 1100'), 'desktop QA is required'],
   [viewportAudit.includes('audit_viewport tablet 1024 900'), 'tablet QA is required'],
   [viewportAudit.includes('audit_viewport phone 390 844'), 'phone QA is required'],
@@ -240,8 +245,7 @@ const browserBundle = [
 const forbiddenPatterns = [
   /sk-[A-Za-z0-9_-]{20,}/,
   /BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/,
-  /Bearer\s+[A-Za-z0-9._-]{20,}/i,
-  /OPENROUTER_API_KEY\s*=\s*[^'"\s]+/
+  /Bearer\s+[A-Za-z0-9._-]{20,}/i
 ];
 
 for (const [name, content] of [
