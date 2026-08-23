@@ -1,11 +1,11 @@
 {
   "name": "HarnessLab",
   "short_name": "HarnessLab",
-  "description": "Deploy-first agent harness architecture studio.",
+  "description": "Deploy-first AI agent harness builder.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#050a12",
-  "theme_color": "#07111f",
+  "background_color": "#F7F8FC",
+  "theme_color": "#635BFF",
   "icons": [
     {
       "src": "./favicon.svg",
