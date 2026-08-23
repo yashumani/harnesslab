@@ -48,6 +48,7 @@ jobs:
           grep -q 'id="root"' /tmp/harnesslab-index.html
           grep -q 'react@18.3.1' /tmp/harnesslab-index.html
           grep -q 'href="./taskzen-theme.css"' /tmp/harnesslab-index.html
+          grep -q 'href="./taskzen-responsive.css"' /tmp/harnesslab-index.html
           grep -q 'src="./taskzen-shell.js"' /tmp/harnesslab-index.html
           grep -q 'src="./critic-console.js"' /tmp/harnesslab-index.html
           if grep -q 'neuronest-theme.css' /tmp/harnesslab-index.html; then
@@ -71,10 +72,15 @@ jobs:
           grep -q '.architecture-map' /tmp/harnesslab-taskzen.css
           grep -q '@media (max-width: 760px)' /tmp/harnesslab-taskzen.css
           grep -q 'prefers-reduced-motion' /tmp/harnesslab-taskzen.css
-          if grep -Eqi 'url[[:space:]]*\([[:space:]]*["'\'' ]?https?:|data:image/' /tmp/harnesslab-taskzen.css; then
+          if grep -Eqi "url[[:space:]]*\\([[:space:]]*['\"]?https?:|data:image/" /tmp/harnesslab-taskzen.css; then
             echo 'The visual layer must not embed remote or data-image artwork.'
             exit 1
           fi
+
+          curl --fail --silent http://127.0.0.1:4173/taskzen-responsive.css > /tmp/harnesslab-taskzen-responsive.css
+          grep -q '.result-tabs' /tmp/harnesslab-taskzen-responsive.css
+          grep -q 'grid-template-columns: repeat(2, minmax(0, 1fr))' /tmp/harnesslab-taskzen-responsive.css
+          grep -q 'white-space: normal' /tmp/harnesslab-taskzen-responsive.css
 
           curl --fail --silent http://127.0.0.1:4173/taskzen-shell.js > /tmp/harnesslab-taskzen-shell.js
           grep -q "const DESIGN_ID = 'taskzen'" /tmp/harnesslab-taskzen-shell.js
