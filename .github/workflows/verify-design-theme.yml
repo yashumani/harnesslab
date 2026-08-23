@@ -1,9 +1,6 @@
 name: Verify HarnessLab Taskzen Design
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/verify-design-theme.yml'
   workflow_run:
     workflows:
       - Deploy HarnessLab to Pages
@@ -15,13 +12,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-harnesslab-taskzen-design-${{ github.ref }}
+  group: verify-harnesslab-taskzen-design-live
   cancel-in-progress: true
 
 jobs:
   verify-theme:
     name: Design / live
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -39,6 +36,7 @@ jobs:
               "${BASE_URL}/?theme=${GITHUB_RUN_ID}-${attempt}" \
               -o /tmp/harnesslab-theme-index.html; then
               if grep -q 'href="./taskzen-theme.css"' /tmp/harnesslab-theme-index.html \
+                && grep -q 'href="./taskzen-responsive.css"' /tmp/harnesslab-theme-index.html \
                 && grep -q 'src="./taskzen-shell.js"' /tmp/harnesslab-theme-index.html; then
                 ready=true
                 break
@@ -62,6 +60,9 @@ jobs:
             "${BASE_URL}/taskzen-theme.css?theme=${GITHUB_RUN_ID}" \
             -o /tmp/harnesslab-taskzen-theme.css
           curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/taskzen-responsive.css?theme=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-taskzen-responsive.css
+          curl --fail --silent --show-error --location --max-time 20 \
             "${BASE_URL}/taskzen-shell.js?theme=${GITHUB_RUN_ID}" \
             -o /tmp/harnesslab-taskzen-shell.js
 
@@ -81,10 +82,13 @@ jobs:
           grep -q '@media (max-width: 1120px)' /tmp/harnesslab-taskzen-theme.css
           grep -q '@media (max-width: 760px)' /tmp/harnesslab-taskzen-theme.css
           grep -q 'prefers-reduced-motion' /tmp/harnesslab-taskzen-theme.css
+          grep -q '.result-tabs' /tmp/harnesslab-taskzen-responsive.css
+          grep -q 'grid-template-columns: repeat(2, minmax(0, 1fr))' /tmp/harnesslab-taskzen-responsive.css
+          grep -q 'white-space: normal' /tmp/harnesslab-taskzen-responsive.css
           grep -q "const DESIGN_ID = 'taskzen'" /tmp/harnesslab-taskzen-shell.js
           grep -q 'dataset.uiOverflow' /tmp/harnesslab-taskzen-shell.js
 
-          if grep -Eqi 'url[[:space:]]*\([[:space:]]*["'\'' ]?https?:|data:image/' /tmp/harnesslab-taskzen-theme.css; then
+          if grep -Eqi "url[[:space:]]*\\([[:space:]]*['\"]?https?:|data:image/" /tmp/harnesslab-taskzen-theme.css /tmp/harnesslab-taskzen-responsive.css; then
             echo 'The original design must not embed remote artwork or data-image assets.'
             exit 1
           fi
@@ -94,7 +98,7 @@ jobs:
             echo
             echo "Verified the deployed Taskzen-inspired product design at ${BASE_URL}/"
             echo
-            echo '- Original HarnessLab visual stylesheet: verified'
+            echo '- Original HarnessLab visual and responsive stylesheets: verified'
             echo '- Light canvas with indigo and teal semantic accents: verified'
             echo '- Navigation, hero, workspace, runtime, architect, result, and evidence selectors: verified'
             echo '- Tablet, phone, focus, and reduced-motion behavior: verified'
