@@ -5,11 +5,14 @@ const requiredFiles = [
   'apps/web/index.html',
   'apps/web/react-app.css',
   'apps/web/taskzen-theme.css',
+  'apps/web/taskzen-responsive.css',
   'apps/web/taskzen-shell.js',
   'apps/web/app.js',
   'apps/web/engine.js',
   'apps/web/workspace-store.js',
   'apps/web/analysis-client.js',
+  'apps/web/critic-core.js',
+  'apps/web/browser-critic-runtime.js',
   'apps/web/critic-client.js',
   'apps/web/critic-console.js',
   'apps/web/critic-console.css',
@@ -20,6 +23,7 @@ const requiredFiles = [
   'apps/web/.nojekyll',
   'services/gateway/app.mjs',
   'services/gateway/config.mjs',
+  'services/gateway/errors.mjs',
   'services/gateway/provider-registry.mjs',
   'services/gateway/temporary-critic.mjs',
   'services/gateway/providers/architecture-guidance.mjs',
@@ -30,6 +34,8 @@ const requiredFiles = [
   'services/gateway/server.mjs',
   'services/gateway/Dockerfile',
   'scripts/capture-ui-viewport.mjs',
+  'scripts/verify-live-browser-critic.mjs',
+  'scripts/validate-taskzen.mjs',
   'docs/architecture/ANALYSIS_GATEWAY.md',
   'docs/architecture/NO_BUILD_REACT.md',
   'docs/architecture/TEMPORARY_CRITIC.md',
@@ -40,180 +46,201 @@ const requiredFiles = [
   '.github/workflows/ui-viewport-audit.yml'
 ];
 
-for (const path of requiredFiles) {
-  await access(path, constants.R_OK);
-}
+for (const path of requiredFiles) await access(path, constants.R_OK);
 
-const html = await readFile('apps/web/index.html', 'utf8');
-const app = await readFile('apps/web/app.js', 'utf8');
-const visualCss = await readFile('apps/web/react-app.css', 'utf8');
-const taskzenTheme = await readFile('apps/web/taskzen-theme.css', 'utf8');
-const taskzenShell = await readFile('apps/web/taskzen-shell.js', 'utf8');
-const engine = await readFile('apps/web/engine.js', 'utf8');
-const workspace = await readFile('apps/web/workspace-store.js', 'utf8');
-const analysisClient = await readFile('apps/web/analysis-client.js', 'utf8');
-const criticClient = await readFile('apps/web/critic-client.js', 'utf8');
-const criticConsole = await readFile('apps/web/critic-console.js', 'utf8');
-const criticCss = await readFile('apps/web/critic-console.css', 'utf8');
-const resultContract = await readFile('apps/web/result-contract.js', 'utf8');
-const workerContract = await readFile('apps/web/temporary-worker-contract.js', 'utf8');
-const gateway = await readFile('services/gateway/app.mjs', 'utf8');
-const gatewayConfig = await readFile('services/gateway/config.mjs', 'utf8');
-const registry = await readFile('services/gateway/provider-registry.mjs', 'utf8');
-const temporaryCritic = await readFile('services/gateway/temporary-critic.mjs', 'utf8');
-const guidance = await readFile('services/gateway/providers/architecture-guidance.mjs', 'utf8');
-const deterministic = await readFile('services/gateway/providers/deterministic.mjs', 'utf8');
-const providerHttp = await readFile('services/gateway/providers/provider-http.mjs', 'utf8');
-const ollama = await readFile('services/gateway/providers/ollama.mjs', 'utf8');
-const openrouter = await readFile('services/gateway/providers/openrouter.mjs', 'utf8');
-const dockerfile = await readFile('services/gateway/Dockerfile', 'utf8');
-const captureViewport = await readFile('scripts/capture-ui-viewport.mjs', 'utf8');
-const deploy = await readFile('.github/workflows/deploy-pages.yml', 'utf8');
-const verifyPages = await readFile('.github/workflows/verify-pages.yml', 'utf8');
-const viewportAudit = await readFile('.github/workflows/ui-viewport-audit.yml', 'utf8');
-
-const browserBundle = [
+const read = (path) => readFile(path, 'utf8');
+const [
   html,
   app,
+  baseCss,
+  taskzenTheme,
+  taskzenResponsive,
   taskzenShell,
   engine,
   workspace,
   analysisClient,
+  criticCore,
+  browserCritic,
   criticClient,
   criticConsole,
+  criticCss,
   resultContract,
-  workerContract
-].join('\n');
+  workerContract,
+  gateway,
+  gatewayConfig,
+  gatewayErrors,
+  registry,
+  gatewayCritic,
+  guidance,
+  deterministic,
+  providerHttp,
+  ollama,
+  openrouter,
+  dockerfile,
+  captureViewport,
+  liveCriticVerifier,
+  deploy,
+  verifyPages,
+  viewportAudit
+] = await Promise.all([
+  read('apps/web/index.html'),
+  read('apps/web/app.js'),
+  read('apps/web/react-app.css'),
+  read('apps/web/taskzen-theme.css'),
+  read('apps/web/taskzen-responsive.css'),
+  read('apps/web/taskzen-shell.js'),
+  read('apps/web/engine.js'),
+  read('apps/web/workspace-store.js'),
+  read('apps/web/analysis-client.js'),
+  read('apps/web/critic-core.js'),
+  read('apps/web/browser-critic-runtime.js'),
+  read('apps/web/critic-client.js'),
+  read('apps/web/critic-console.js'),
+  read('apps/web/critic-console.css'),
+  read('apps/web/result-contract.js'),
+  read('apps/web/temporary-worker-contract.js'),
+  read('services/gateway/app.mjs'),
+  read('services/gateway/config.mjs'),
+  read('services/gateway/errors.mjs'),
+  read('services/gateway/provider-registry.mjs'),
+  read('services/gateway/temporary-critic.mjs'),
+  read('services/gateway/providers/architecture-guidance.mjs'),
+  read('services/gateway/providers/deterministic.mjs'),
+  read('services/gateway/providers/provider-http.mjs'),
+  read('services/gateway/providers/ollama.mjs'),
+  read('services/gateway/providers/openrouter.mjs'),
+  read('services/gateway/Dockerfile'),
+  read('scripts/capture-ui-viewport.mjs'),
+  read('scripts/verify-live-browser-critic.mjs'),
+  read('.github/workflows/deploy-pages.yml'),
+  read('.github/workflows/verify-pages.yml'),
+  read('.github/workflows/ui-viewport-audit.yml')
+]);
 
 const checks = [
   [html.includes('id="root"'), 'index must provide the React mount root'],
-  [html.includes('href="./react-app.css"'), 'index must load the repository-relative React visual stylesheet'],
-  [html.includes('href="./taskzen-theme.css"'), 'index must load the Taskzen-inspired visual system'],
-  [!html.includes('neuronest-theme.css'), 'index must not load the superseded NeuroNest theme'],
-  [html.includes('type="module" src="./taskzen-shell.js"'), 'index must load the responsive Taskzen browser shell'],
-  [html.includes('type="module" src="./app.js"'), 'index must use a repository-relative application module'],
-  [html.includes('type="module" src="./critic-console.js"'), 'index must load the executable critic console module'],
-  [html.indexOf('src="./taskzen-shell.js"') < html.indexOf('src="./critic-console.js"'), 'the visual shell must initialize before the critic console'],
-  [html.indexOf('src="./critic-console.js"') < html.indexOf('src="./app.js"'), 'critic console must subscribe before the main application publishes its initial result'],
-  [html.includes('data-design="taskzen"'), 'index must disclose the active design identity'],
-  [html.includes('HarnessLab — AI Agent Harness Builder'), 'index must expose the product title'],
-  [html.includes('react@18.3.1/umd/react.production.min.js'), 'index must pin the React no-build runtime'],
-  [html.includes('react-dom@18.3.1/umd/react-dom.production.min.js'), 'index must pin the ReactDOM no-build runtime'],
-  [html.includes('htm@3.1.1/dist/htm.umd.js'), 'index must pin the HTM no-build template runtime'],
-  [!html.includes('text/babel'), 'the deployed application must not use an in-browser JSX compiler'],
-  [!html.includes('type="password"'), 'the static UI must not accept provider credentials'],
-  [app.includes('HtmRuntime.bind(ReactRuntime.createElement)'), 'app must render React without JSX compilation'],
+  [html.includes('href="./react-app.css"'), 'index must load the functional stylesheet'],
+  [html.includes('href="./taskzen-theme.css"'), 'index must load the Taskzen visual system'],
+  [html.includes('href="./taskzen-responsive.css"'), 'index must load responsive refinements'],
+  [!html.includes('neuronest-theme.css'), 'superseded theme must remain absent'],
+  [html.includes('type="module" src="./taskzen-shell.js"'), 'index must load the responsive shell'],
+  [html.includes('type="module" src="./critic-console.js"'), 'index must load the critic console'],
+  [html.includes('type="module" src="./app.js"'), 'index must load the React app'],
+  [html.indexOf('src="./taskzen-shell.js"') < html.indexOf('src="./critic-console.js"'), 'responsive shell must initialize before critic console'],
+  [html.indexOf('src="./critic-console.js"') < html.indexOf('src="./app.js"'), 'critic console must subscribe before the app emits its initial result'],
+  [html.includes('react@18.3.1/umd/react.production.min.js'), 'React runtime must be pinned'],
+  [html.includes('react-dom@18.3.1/umd/react-dom.production.min.js'), 'ReactDOM runtime must be pinned'],
+  [html.includes('htm@3.1.1/dist/htm.umd.js'), 'HTM runtime must be pinned'],
+  [!html.includes('text/babel'), 'the deployed application must remain build-free'],
+  [!html.includes('type="password"'), 'the static application must not collect provider credentials'],
+
+  [app.includes('HtmRuntime.bind(ReactRuntime.createElement)'), 'app must render without JSX compilation'],
   [app.includes('ReactDomRuntime.createRoot(rootElement)'), 'app must mount through ReactDOM'],
-  [app.includes("from './engine.js'"), 'React app must preserve the deterministic engine seam'],
-  [app.includes("from './analysis-client.js'"), 'React app must preserve the provider-neutral analysis seam'],
-  [app.includes("from './workspace-store.js'"), 'React app must preserve the replaceable workspace store'],
-  [app.includes('planned, not executed'), 'React app must disclose that general planned subagents are not executed'],
-  [app.includes('No provider keys in browser'), 'React app must disclose the provider credential boundary'],
-  [visualCss.includes('.architecture-map'), 'functional stylesheet must define the architecture map'],
-  [visualCss.includes('.agent-card-grid'), 'functional stylesheet must define temporary-agent cards'],
-  [visualCss.includes('.permission-table'), 'functional stylesheet must define the permission matrix'],
-  [visualCss.includes('.trace-timeline'), 'functional stylesheet must define the trace timeline'],
-  [visualCss.includes('.evaluation-ring'), 'functional stylesheet must define the evaluation visual'],
-  [taskzenTheme.includes('--cyan: #635bff'), 'Taskzen theme must define the primary indigo accent'],
-  [taskzenTheme.includes('--teal: #0e9384'), 'Taskzen theme must define the secondary teal accent'],
-  [taskzenTheme.includes('--bg-0: #f7f8fc'), 'Taskzen theme must define the light canvas'],
-  [taskzenTheme.includes('.sidebar'), 'Taskzen theme must redesign navigation'],
-  [taskzenTheme.includes('.mission-hero'), 'Taskzen theme must redesign the product hero'],
-  [taskzenTheme.includes('.workspace-layout'), 'Taskzen theme must redesign the project workspace'],
-  [taskzenTheme.includes('.runtime-panel'), 'Taskzen theme must redesign runtime configuration'],
-  [taskzenTheme.includes('.composer-panel'), 'Taskzen theme must redesign requirement entry'],
-  [taskzenTheme.includes('.architecture-map'), 'Taskzen theme must redesign architecture evidence'],
-  [taskzenTheme.includes('.permission-table'), 'Taskzen theme must redesign governance evidence'],
-  [taskzenTheme.includes('@media (max-width: 1120px)'), 'Taskzen theme must include tablet navigation behavior'],
-  [taskzenTheme.includes('@media (max-width: 760px)'), 'Taskzen theme must include phone composition'],
-  [taskzenTheme.includes('prefers-reduced-motion'), 'Taskzen theme must respect reduced-motion preferences'],
-  [!taskzenTheme.includes('neuronest'), 'Taskzen theme must not depend on the superseded design layer'],
-  [!(/url\s*\(\s*["']?https?:|data:image\//i.test(taskzenTheme)), 'Taskzen theme must not embed remote or data-image artwork'],
-  [taskzenShell.includes("const DESIGN_ID = 'taskzen'"), 'Taskzen shell must expose a stable design identity'],
-  [taskzenShell.includes("return 'phone'"), 'Taskzen shell must classify phone layout'],
-  [taskzenShell.includes("return 'tablet'"), 'Taskzen shell must classify tablet layout'],
-  [taskzenShell.includes("return 'desktop'"), 'Taskzen shell must classify desktop layout'],
-  [taskzenShell.includes('dataset.uiOverflow'), 'Taskzen shell must report horizontal overflow'],
-  [taskzenShell.includes('dataset.uiUndersized'), 'Taskzen shell must report touch-target failures'],
-  [taskzenShell.includes('dataset.uiClipped'), 'Taskzen shell must report clipped controls'],
-  [taskzenShell.includes('ui-audit-output'), 'Taskzen shell must retain browser audit evidence'],
-  [captureViewport.includes('Emulation.setDeviceMetricsOverride'), 'viewport capture must use exact CDP viewport emulation'],
-  [captureViewport.includes('Page.captureScreenshot'), 'viewport capture must retain image evidence'],
-  [captureViewport.includes('uiDesign === \'taskzen\''), 'viewport capture must validate design identity'],
-  [viewportAudit.includes('audit_viewport desktop 1440 1100'), 'viewport workflow must audit desktop'],
-  [viewportAudit.includes('audit_viewport tablet 1024 900'), 'viewport workflow must audit tablet'],
-  [viewportAudit.includes('audit_viewport phone 390 844'), 'viewport workflow must audit phone'],
-  [viewportAudit.includes('harnesslab-taskzen-ui-audit'), 'viewport workflow must retain responsive evidence'],
-  [analysisClient.includes('harnesslab:analysis-result'), 'analysis client must publish results for the bounded critic console'],
-  [criticClient.includes('/v1/critique'), 'critic client must call only the bounded worker endpoint'],
-  [criticClient.includes('WORKER_REQUIRES_GATEWAY'), 'critic client must keep browser mode analysis-only'],
-  [criticConsole.includes('One worker'), 'critic console must disclose the one-worker limit'],
-  [criticConsole.includes('One provider call'), 'critic console must disclose the one-call limit'],
-  [criticConsole.includes('No tools'), 'critic console must disclose that tools are unavailable'],
-  [criticConsole.includes('No child agents'), 'critic console must disclose that child agents are unavailable'],
-  [criticConsole.includes('No external actions'), 'critic console must disclose that external actions are unavailable'],
-  [criticConsole.includes('harnesslab:critic-result'), 'critic console must consume validated worker results'],
-  [criticCss.includes('.critic-drawer'), 'critic visual must define the execution drawer'],
-  [criticCss.includes('.finding-card'), 'critic visual must define retained finding cards'],
-  [criticCss.includes('@media (max-width: 760px)'), 'critic visual must be mobile responsive'],
-  [criticCss.includes('prefers-reduced-motion'), 'critic visual must respect reduced-motion settings'],
-  [criticCss.includes('--critic-cyan: #635bff'), 'critic visual must use the shared indigo product accent'],
-  [!browserBundle.includes('OPENROUTER_API_KEY'), 'browser assets must not reference the OpenRouter credential variable'],
-  [!browserBundle.toLowerCase().includes('authorization: bearer'), 'browser assets must not construct provider authorization'],
-  [analysisClient.includes('GATEWAY_INVALID_RESULT'), 'analysis client must reject invalid gateway results'],
-  [analysisClient.includes('gateway.fallback'), 'analysis client must record automatic fallback'],
-  [!analysisClient.toLowerCase().includes('authorization:'), 'browser analysis client must not add provider authorization'],
-  [!criticClient.toLowerCase().includes('authorization:'), 'browser critic client must not add provider authorization'],
-  [resultContract.includes('validateHarnessResult'), 'shared result contract validator is required'],
-  [workerContract.includes('validateTemporaryWorker'), 'shared temporary-worker contract validator is required'],
-  [workerContract.includes('callBudget must equal 1'), 'worker contract must enforce one call'],
-  [workerContract.includes('tools must be an empty array'), 'worker contract must enforce no tools'],
-  [workerContract.includes('childSpawning must be false'), 'worker contract must prohibit child agents'],
-  [workerContract.includes('externalActions must be false'), 'worker contract must prohibit external actions'],
-  [workspace.includes('WORKSPACE_SCHEMA_VERSION'), 'workspace store must version its persisted schema'],
-  [workspace.includes('MAX_RUNS_PER_PROJECT'), 'workspace store must bound local run retention'],
-  [engine.includes('no live model or external tool execution'), 'engine must disclose that live execution is absent'],
-  [gateway.includes("'/health'"), 'gateway must expose its health contract'],
-  [gateway.includes("'/v1/analyze'"), 'gateway must expose its analysis contract'],
-  [gateway.includes("'/v1/critique'"), 'gateway must expose the bounded critic contract'],
+  [app.includes("from './engine.js'"), 'app must preserve deterministic planning'],
+  [app.includes("from './analysis-client.js'"), 'app must preserve provider-neutral analysis'],
+  [app.includes("from './workspace-store.js'"), 'app must preserve replaceable workspace storage'],
+  [app.includes('planned, not executed'), 'general planned subagents must remain disclosed as not executed'],
+  [app.includes('No provider keys in browser'), 'browser credential boundary must remain visible'],
+
+  [baseCss.includes('.architecture-map'), 'functional CSS must include the architecture map'],
+  [baseCss.includes('.agent-card-grid'), 'functional CSS must include temporary-agent cards'],
+  [baseCss.includes('.permission-table'), 'functional CSS must include the permission matrix'],
+  [baseCss.includes('.trace-timeline'), 'functional CSS must include the trace timeline'],
+  [taskzenTheme.includes('--cyan: #635bff'), 'Taskzen theme must define the indigo accent'],
+  [taskzenTheme.includes('--teal: #0e9384'), 'Taskzen theme must define the teal accent'],
+  [taskzenResponsive.includes('.result-tabs'), 'responsive layer must protect phone result navigation'],
+  [taskzenShell.includes("const DESIGN_ID = 'taskzen'"), 'responsive shell must identify the active design'],
+  [taskzenShell.includes('setInert(sidebar, true)'), 'closed responsive navigation must become inert'],
+  [taskzenShell.includes("sidebar.setAttribute('aria-hidden', 'true')"), 'closed responsive navigation must leave the accessibility tree'],
+
+  [criticCore.includes('MAX_CRITIC_CONTEXT_BYTES = 48 * 1024'), 'portable critic core must bound context'],
+  [criticCore.includes('tools: []'), 'portable critic core must expose no tools'],
+  [criticCore.includes('externalActions: false'), 'portable critic core must deny external actions'],
+  [criticCore.includes('childSpawning: false'), 'portable critic core must deny child workers'],
+  [criticCore.includes('modelCallBudget: 1'), 'portable critic core must enforce one bounded invocation'],
+  [criticCore.includes('Temporary critic findings cannot weaken permissions'), 'portable critic core must preserve authoritative controls'],
+  [!criticCore.includes("from 'node:"), 'portable critic core must remain browser-compatible'],
+  [!criticCore.includes('fetch('), 'portable critic core must not perform network access'],
+
+  [browserCritic.includes('executeBrowserDeterministicCritic'), 'browser runtime must expose deterministic execution'],
+  [browserCritic.includes("execution: 'browser-local'"), 'browser runtime must record its execution path'],
+  [browserCritic.includes('networkRequests: 0'), 'browser runtime must record zero network requests'],
+  [browserCritic.includes("provider: 'deterministic'"), 'browser runtime must retain deterministic provenance'],
+  [!browserCritic.includes('fetch('), 'browser runtime must not perform network access'],
+  [!browserCritic.includes('OPENROUTER_API_KEY'), 'browser runtime must not reference provider credentials'],
+
+  [criticClient.includes('executeBrowserDeterministicCritic'), 'critic client must route browser mode locally'],
+  [criticClient.includes('settings.mode === RuntimeModes.BROWSER'), 'critic client must distinguish browser mode'],
+  [criticClient.includes("'/v1/critique'") || criticClient.includes('/v1/critique'), 'critic client must retain the bounded gateway endpoint'],
+  [criticClient.includes('JSON.stringify({ result })'), 'gateway critic request must send only the harness result'],
+  [!criticClient.toLowerCase().includes('authorization:'), 'critic client must not construct provider authorization'],
+  [criticConsole.includes('Browser local · no network'), 'critic console must expose browser-local execution'],
+  [criticConsole.includes('One local invocation'), 'critic console must disclose local call limits'],
+  [criticConsole.includes('One provider call'), 'critic console must disclose gateway call limits'],
+  [criticConsole.includes('No tools') && criticConsole.includes('No child agents') && criticConsole.includes('No external actions'), 'critic console must disclose non-capabilities'],
+  [criticCss.includes('.critic-drawer') && criticCss.includes('.finding-card'), 'critic console visuals must remain available'],
+  [criticCss.includes('@media (max-width: 760px)'), 'critic console must remain responsive'],
+  [criticCss.includes('prefers-reduced-motion'), 'critic console must respect reduced motion'],
+
+  [resultContract.includes('validateHarnessResult'), 'shared result validation is required'],
+  [workerContract.includes('validateTemporaryWorker'), 'shared worker validation is required'],
+  [workerContract.includes('callBudget must equal 1'), 'worker must retain one-call budget'],
+  [workerContract.includes('tools must be an empty array'), 'worker contract must deny tools'],
+  [workerContract.includes('childSpawning must be false'), 'worker contract must deny child spawning'],
+  [workerContract.includes('externalActions must be false'), 'worker contract must deny external actions'],
+  [workspace.includes('WORKSPACE_SCHEMA_VERSION'), 'workspace persistence must remain versioned'],
+  [workspace.includes('MAX_RUNS_PER_PROJECT'), 'workspace retention must remain bounded'],
+  [engine.includes('no live model or external tool execution'), 'deterministic planner must disclose its boundary'],
+
+  [gatewayCritic.includes("from '../../apps/web/critic-core.js'"), 'gateway critic must share the portable core'],
+  [gatewayCritic.includes("createHash('sha256')"), 'gateway critic must derive the same SHA-256 context identifier'],
+  [gateway.includes("'/health'") && gateway.includes("'/v1/analyze'") && gateway.includes("'/v1/critique'"), 'gateway routes must remain available'],
   [gateway.includes('maxTemporaryWorkersPerRequest: 1'), 'gateway must expose the one-worker limit'],
-  [gateway.includes('executeTools: false'), 'gateway must deny tools'],
-  [gateway.includes('externalActions: false'), 'gateway must deny external actions'],
-  [gateway.includes('ORIGIN_NOT_ALLOWED'), 'gateway must enforce an origin allowlist'],
-  [gateway.includes('providerResponse.model'), 'gateway must surface the actual routed model when available'],
-  [gateway.includes('freeOnly'), 'gateway must expose provider free-only policy'],
-  [gatewayConfig.includes("'deterministic'"), 'gateway must default to deterministic analysis'],
-  [gatewayConfig.includes("'openrouter'"), 'gateway config must support the OpenRouter provider'],
-  [gatewayConfig.includes('HARNESSLAB_CRITIC_TIMEOUT_MS'), 'gateway config must bound the temporary critic deadline'],
-  [gatewayConfig.includes('HARNESSLAB_CRITIC_MAX_BODY_BYTES'), 'gateway config must bound the critic request body'],
-  [gatewayConfig.includes('normalizeFreeOpenRouterModel'), 'gateway config must enforce free-only OpenRouter models'],
-  [registry.includes('createOpenRouterProvider'), 'provider registry must construct the OpenRouter adapter'],
-  [temporaryCritic.includes('modelCallBudget: 1'), 'temporary critic context must enforce a one-call budget'],
-  [temporaryCritic.includes('tools: []'), 'temporary critic context must expose no tools'],
-  [temporaryCritic.includes('childSpawning: false'), 'temporary critic context must prohibit child agents'],
-  [temporaryCritic.includes('Temporary critic findings cannot weaken permissions'), 'deterministic merge must preserve controls'],
-  [guidance.includes('deterministic HarnessLab controls remain authoritative'), 'shared guidance contract must preserve deterministic controls'],
-  [providerHttp.includes('await response.text()'), 'provider timeout boundary must include complete response bodies'],
-  [deterministic.includes('async critique'), 'deterministic provider must implement the temporary critic'],
-  [ollama.includes('async function critique'), 'Ollama adapter must implement the temporary critic'],
-  [ollama.includes('createCriticPrompt'), 'Ollama critic must use the bounded worker prompt'],
-  [openrouter.includes('https://openrouter.ai/api/v1'), 'OpenRouter adapter must use the fixed official HTTPS API origin'],
-  [openrouter.includes('openrouter/free'), 'OpenRouter adapter must support the free router'],
-  [openrouter.includes("endsWith(':free')"), 'OpenRouter adapter must enforce explicit free variants'],
-  [openrouter.includes('async function critique'), 'OpenRouter adapter must implement the temporary critic'],
-  [openrouter.includes('createCriticPrompt'), 'OpenRouter critic must use the bounded worker prompt'],
-  [openrouter.includes('/chat/completions'), 'OpenRouter adapter must use the chat-completions endpoint'],
-  [openrouter.includes('/key'), 'OpenRouter adapter must validate the configured key'],
-  [dockerfile.includes('USER node'), 'gateway container must run as a non-root user'],
-  [deploy.includes('actions/deploy-pages@'), 'deployment workflow must use the official Pages deployment action'],
-  [deploy.includes('path: apps/web'), 'deployment workflow must publish only the web artifact directory'],
-  [verifyPages.includes('/critic-console.js'), 'live verification must validate the deployed critic console'],
-  [verifyPages.includes('/critic-console.css'), 'live verification must validate the deployed critic visual']
+  [gateway.includes('executeTools: false') && gateway.includes('externalActions: false'), 'gateway must deny execution capabilities'],
+  [gateway.includes('ORIGIN_NOT_ALLOWED'), 'gateway must retain exact-origin CORS enforcement'],
+  [gatewayConfig.includes("'deterministic'") && gatewayConfig.includes("'openrouter'"), 'gateway must retain deterministic and OpenRouter providers'],
+  [gatewayConfig.includes('normalizeFreeOpenRouterModel'), 'gateway must enforce free-only OpenRouter routes'],
+  [gatewayErrors.includes('ProviderResponseError'), 'gateway must retain provider response errors'],
+  [registry.includes('createOpenRouterProvider'), 'provider registry must retain OpenRouter'],
+  [guidance.includes('deterministic HarnessLab controls remain authoritative'), 'model guidance must remain advisory'],
+  [deterministic.includes('async critique'), 'deterministic gateway provider must support critique'],
+  [providerHttp.includes('await response.text()'), 'provider timeout must include response bodies'],
+  [ollama.includes('createCriticPrompt') && ollama.includes('parseCriticReview'), 'Ollama must retain bounded critic parsing'],
+  [openrouter.includes('https://openrouter.ai/api/v1'), 'OpenRouter must use the fixed official origin'],
+  [openrouter.includes('openrouter/free') && openrouter.includes("endsWith(':free')"), 'OpenRouter must remain free-only'],
+  [openrouter.includes('createCriticPrompt') && openrouter.includes('parseCriticReview'), 'OpenRouter must retain bounded critic parsing'],
+  [dockerfile.includes('USER node'), 'gateway container must run non-root'],
+
+  [captureViewport.includes('Emulation.setDeviceMetricsOverride'), 'viewport QA must use exact browser emulation'],
+  [captureViewport.includes('Page.captureScreenshot'), 'viewport QA must retain screenshots'],
+  [liveCriticVerifier.includes('Browser-local critic execution'), 'live verifier must execute the public browser critic'],
+  [liveCriticVerifier.includes('prohibitedRequests.length === 0'), 'live verifier must reject critic network calls'],
+  [viewportAudit.includes('audit_viewport desktop 1440 1100'), 'desktop QA is required'],
+  [viewportAudit.includes('audit_viewport tablet 1024 900'), 'tablet QA is required'],
+  [viewportAudit.includes('audit_viewport phone 390 844'), 'phone QA is required'],
+  [deploy.includes('actions/deploy-pages@'), 'deployment must use the official Pages action'],
+  [deploy.includes('path: apps/web'), 'deployment must publish only the web directory'],
+  [verifyPages.includes('/critic-console.js'), 'live verification must check the critic console'],
+  [verifyPages.includes('/temporary-worker-contract.js'), 'live verification must check the worker contract']
 ];
 
 for (const [condition, message] of checks) {
   if (!condition) throw new Error(message);
 }
+
+const browserBundle = [
+  html,
+  app,
+  engine,
+  workspace,
+  analysisClient,
+  criticCore,
+  browserCritic,
+  criticClient,
+  criticConsole,
+  resultContract,
+  workerContract
+].join('\n');
 
 const forbiddenPatterns = [
   /sk-[A-Za-z0-9_-]{20,}/,
@@ -222,37 +249,22 @@ const forbiddenPatterns = [
 ];
 
 for (const [name, content] of [
-  ['index', html],
-  ['app', app],
-  ['react-css', visualCss],
-  ['taskzen-theme', taskzenTheme],
-  ['taskzen-shell', taskzenShell],
-  ['engine', engine],
-  ['workspace', workspace],
-  ['analysis-client', analysisClient],
-  ['critic-client', criticClient],
-  ['critic-console', criticConsole],
-  ['critic-css', criticCss],
-  ['result-contract', resultContract],
-  ['worker-contract', workerContract],
+  ['browser-bundle', browserBundle],
   ['gateway', gateway],
   ['gateway-config', gatewayConfig],
   ['registry', registry],
-  ['temporary-critic', temporaryCritic],
+  ['gateway-critic', gatewayCritic],
   ['guidance', guidance],
   ['provider-http', providerHttp],
-  ['deterministic', deterministic],
   ['ollama', ollama],
   ['openrouter', openrouter],
   ['dockerfile', dockerfile],
-  ['capture-viewport', captureViewport],
   ['deploy', deploy],
-  ['verify-pages', verifyPages],
-  ['viewport-audit', viewportAudit]
+  ['verify-pages', verifyPages]
 ]) {
   for (const pattern of forbiddenPatterns) {
     if (pattern.test(content)) throw new Error(`Potential secret found in ${name}`);
   }
 }
 
-console.log(`Validated ${requiredFiles.length} no-build React, Taskzen UI, temporary-worker, application, and gateway files.`);
+console.log(`Validated ${requiredFiles.length} no-build React, local critic, gateway, worker, UI, and deployment files.`);

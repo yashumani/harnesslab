@@ -75,7 +75,8 @@ class HarnessLabCriticConsole extends HTMLElement {
     this.latestResult = null;
     this.reviewedResult = null;
     this.worker = null;
-    this.message = 'Generate a harness plan, then run one bounded critic through the configured gateway.';
+    this.execution = null;
+    this.message = 'Generate a harness plan, then run one bounded deterministic critic locally or use the configured gateway for model-backed review.';
     this.messageType = 'neutral';
     this.onAnalysisResult = this.onAnalysisResult.bind(this);
     this.onCriticResult = this.onCriticResult.bind(this);
@@ -103,6 +104,7 @@ class HarnessLabCriticConsole extends HTMLElement {
     this.latestResult = cloneJson(event.detail);
     this.reviewedResult = null;
     this.worker = null;
+    this.execution = null;
     this.message = 'Plan captured. The temporary critic can now inspect its minimum context envelope.';
     this.messageType = 'success';
     this.render();
@@ -112,6 +114,7 @@ class HarnessLabCriticConsole extends HTMLElement {
     if (!event?.detail?.result || !event?.detail?.worker) return;
     this.reviewedResult = cloneJson(event.detail.result);
     this.worker = cloneJson(event.detail.worker);
+    this.execution = event.detail.metadata?.execution || (this.worker.liveModel ? 'gateway' : 'deterministic');
     this.message = this.worker.status === 'completed'
       ? 'Critic artifact validated. Deterministic merge rules applied only supported findings.'
       : 'The worker did not complete; the failure state and trace were retained without fabricating findings.';
@@ -140,16 +143,12 @@ class HarnessLabCriticConsole extends HTMLElement {
       return;
     }
     const settings = this.getRuntimeSettings();
-    if (settings.mode === RuntimeModes.BROWSER) {
-      this.message = 'Browser mode deliberately does not execute subagents. Start a HarnessLab gateway and select Automatic or Gateway required.';
-      this.messageType = 'warning';
-      this.open = true;
-      this.render();
-      return;
-    }
+    const browserLocal = settings.mode === RuntimeModes.BROWSER;
 
     this.busy = true;
-    this.message = 'Compiling minimum context and executing one bounded architecture critic…';
+    this.message = browserLocal
+      ? 'Compiling minimum context and executing one browser-local deterministic architecture critic…'
+      : 'Compiling minimum context and executing one gateway-backed architecture critic…';
     this.messageType = 'active';
     this.open = true;
     this.render();
@@ -157,8 +156,11 @@ class HarnessLabCriticConsole extends HTMLElement {
       const response = await this.criticClient.critique(this.latestResult, settings);
       this.reviewedResult = cloneJson(response.result);
       this.worker = cloneJson(response.worker);
+      this.execution = response.metadata?.execution || (browserLocal ? 'browser-local' : 'gateway');
       this.message = this.worker.status === 'completed'
-        ? 'Critic artifact validated. Deterministic merge rules applied only supported findings.'
+        ? browserLocal
+          ? 'Browser-local critic artifact validated with zero network requests.'
+          : 'Gateway critic artifact validated. Deterministic merge rules applied only supported findings.'
         : 'The worker did not complete; failure evidence was retained and no finding was applied.';
       this.messageType = this.worker.status === 'completed' ? 'success' : 'warning';
     } catch (error) {
@@ -228,10 +230,13 @@ class HarnessLabCriticConsole extends HTMLElement {
     const settings = this.getRuntimeSettings();
     const worker = this.worker;
     const hasResult = Boolean(this.latestResult);
-    const gatewayReady = settings.mode !== RuntimeModes.BROWSER;
+    const browserLocal = settings.mode === RuntimeModes.BROWSER;
     const accepted = worker?.acceptedFindings ?? [];
     const rejected = worker?.rejectedFindings ?? [];
     const status = worker?.status ?? 'idle';
+    const executionPath = this.execution === 'browser-local' || (!worker && browserLocal)
+      ? 'Browser local · no network'
+      : settings.gatewayUrl;
     const buttonLabel = this.busy
       ? 'Critic running'
       : worker
@@ -256,12 +261,12 @@ class HarnessLabCriticConsole extends HTMLElement {
           </header>
 
           <div class="guardrail-strip" aria-label="Temporary worker limits">
-            <span>One worker</span><span>One provider call</span><span>No tools</span><span>No child agents</span><span>No external actions</span>
+            <span>One worker</span><span>${browserLocal ? 'One local invocation' : 'One provider call'}</span><span>No tools</span><span>No child agents</span><span>No external actions</span>
           </div>
 
           <div class="runtime-card">
             <div><span>Runtime mode</span><strong>${escapeHtml(modeLabel(settings.mode))}</strong></div>
-            <div><span>Gateway</span><strong>${escapeHtml(settings.gatewayUrl)}</strong></div>
+            <div><span>Execution path</span><strong>${escapeHtml(executionPath)}</strong></div>
             <div><span>Captured plan</span><strong>${hasResult ? escapeHtml(this.latestResult.runId) : 'None yet'}</strong></div>
             <div><span>Worker status</span><strong data-status="${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</strong></div>
           </div>
@@ -272,7 +277,9 @@ class HarnessLabCriticConsole extends HTMLElement {
             <button class="run-button" data-action="run" type="button" ${this.busy ? 'disabled' : ''}>
               <span>${this.busy ? 'Running bounded critic…' : 'Execute one bounded critic'}</span><strong>→</strong>
             </button>
-            <p>${gatewayReady ? 'The configured gateway chooses the provider. The browser sends no provider credential.' : 'Switch from browser mode to execute a real gateway worker.'}</p>
+            <p>${browserLocal
+              ? 'The deterministic critic runs locally with no network request, account, model, API key, or external capability.'
+              : 'The configured gateway chooses the provider. The browser sends no provider credential.'}</p>
           </div>
 
           ${worker ? `
@@ -319,7 +326,7 @@ class HarnessLabCriticConsole extends HTMLElement {
             <section class="empty-state">
               <div class="empty-icon">C</div>
               <h3>No temporary critic has executed</h3>
-              <p>Generate or restore a harness plan, run a compatible gateway, and execute the critic. Browser-only analysis remains available without the worker.</p>
+              <p>Generate or restore a harness plan and execute the deterministic critic immediately in browser mode. Select a compatible gateway only for Ollama or free-only OpenRouter review.</p>
             </section>
           `}
         </div>

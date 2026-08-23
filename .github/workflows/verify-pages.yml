@@ -21,9 +21,20 @@ jobs:
     name: Pages / live
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
-      - name: Verify the public no-build React product workspace
+      - name: Check out the deployed release
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Verify the public no-build React product workspace and runtime assets
         shell: bash
         env:
           BASE_URL: https://yashumani.github.io/harnesslab
@@ -105,17 +116,36 @@ jobs:
           grep -q 'ui-audit-output' /tmp/harnesslab-live-taskzen-shell.js
 
           curl --fail --silent --show-error --location --max-time 20 \
-            "${BASE_URL}/react-app.css?verify=${GITHUB_RUN_ID}" \
-            -o /tmp/harnesslab-live-react.css
-          grep -q '.architecture-map' /tmp/harnesslab-live-react.css
-          grep -q '.agent-card-grid' /tmp/harnesslab-live-react.css
+            "${BASE_URL}/critic-core.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-live-critic-core.js
+          grep -q 'MAX_CRITIC_CONTEXT_BYTES = 48 \* 1024' /tmp/harnesslab-live-critic-core.js
+          grep -q 'modelCallBudget: 1' /tmp/harnesslab-live-critic-core.js
+          grep -q 'Temporary critic findings cannot weaken permissions' /tmp/harnesslab-live-critic-core.js
+          if grep -qi 'fetch(' /tmp/harnesslab-live-critic-core.js; then
+            echo 'The public portable critic core must not perform network access.'
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/browser-critic-runtime.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-live-browser-critic.js
+          grep -q 'executeBrowserDeterministicCritic' /tmp/harnesslab-live-browser-critic.js
+          grep -q "execution: 'browser-local'" /tmp/harnesslab-live-browser-critic.js
+          grep -q 'networkRequests: 0' /tmp/harnesslab-live-browser-critic.js
+          grep -q "provider: 'deterministic'" /tmp/harnesslab-live-browser-critic.js
+          if grep -qi 'fetch(' /tmp/harnesslab-live-browser-critic.js; then
+            echo 'The public browser deterministic critic must not perform network access.'
+            exit 1
+          fi
 
           curl --fail --silent --show-error --location --max-time 20 \
             "${BASE_URL}/critic-console.js?verify=${GITHUB_RUN_ID}" \
             -o /tmp/harnesslab-live-critic.js
           grep -q 'HarnessLabCriticConsole' /tmp/harnesslab-live-critic.js
           grep -q 'One worker' /tmp/harnesslab-live-critic.js
+          grep -q 'One local invocation' /tmp/harnesslab-live-critic.js
           grep -q 'One provider call' /tmp/harnesslab-live-critic.js
+          grep -q 'Browser local · no network' /tmp/harnesslab-live-critic.js
           grep -q 'No tools' /tmp/harnesslab-live-critic.js
           grep -q 'No child agents' /tmp/harnesslab-live-critic.js
           grep -q 'No external actions' /tmp/harnesslab-live-critic.js
@@ -124,8 +154,10 @@ jobs:
           curl --fail --silent --show-error --location --max-time 20 \
             "${BASE_URL}/critic-client.js?verify=${GITHUB_RUN_ID}" \
             -o /tmp/harnesslab-live-critic-client.js
+          grep -q 'executeBrowserDeterministicCritic' /tmp/harnesslab-live-critic-client.js
+          grep -q 'settings.mode === RuntimeModes.BROWSER' /tmp/harnesslab-live-critic-client.js
           grep -q '/v1/critique' /tmp/harnesslab-live-critic-client.js
-          grep -q 'WORKER_REQUIRES_GATEWAY' /tmp/harnesslab-live-critic-client.js
+          grep -q 'JSON.stringify({ result })' /tmp/harnesslab-live-critic-client.js
           if grep -qi 'authorization:' /tmp/harnesslab-live-critic-client.js; then
             echo 'The public critic client must not construct provider authorization.'
             exit 1
@@ -155,18 +187,61 @@ jobs:
           grep -qi '#F7F8FC' /tmp/harnesslab-live-manifest.json
           grep -qi '#635BFF' /tmp/harnesslab-live-manifest.json
 
+      - name: Execute the public browser-local critic and capture its network boundary
+        shell: bash
+        env:
+          BASE_URL: https://yashumani.github.io/harnesslab
+          CHROME_DEBUG_PORT: '9224'
+        run: |
+          set -euo pipefail
+          mkdir -p live-critic-verification
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "${browser}" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.'
+            exit 1
+          fi
+
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-port=9224 \
+            --user-data-dir=/tmp/harnesslab-live-critic-chrome \
+            about:blank > /tmp/harnesslab-live-critic-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${browser_pid}" 2>/dev/null || true' EXIT
+
+          node scripts/verify-live-browser-critic.mjs \
+            "${BASE_URL}/?verify-browser-critic=${GITHUB_RUN_ID}" \
+            live-critic-verification/result.json
+
+      - name: Upload live critic execution evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-live-browser-critic-verification
+          path: live-critic-verification
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summarize the verified public release
+        shell: bash
+        env:
+          BASE_URL: https://yashumani.github.io/harnesslab
+        run: |
           {
             echo '### Live HarnessLab verification'
             echo
             echo "Verified the deployed Taskzen-inspired no-build React workspace at ${BASE_URL}/"
             echo
             echo '- Product HTML, pinned React runtime, Taskzen theme, responsive layer, and shell: verified'
-            echo '- Light indigo/teal product design and responsive selectors: verified'
             echo '- Responsive drawer inertness, dialog semantics, Escape handling, and focus contract: verified'
-            echo '- Superseded theme reference: absent'
-            echo '- Executable bounded critic console: verified'
-            echo '- One-worker / one-call / no-tools contract: verified'
-            echo '- Web app manifest: verified'
+            echo '- Browser-local deterministic Architecture Critic: executed successfully'
+            echo '- Critic POST, gateway, OpenRouter, and Ollama requests during execution: zero'
+            echo '- One-worker / one-invocation / no-tools / no-child-agent / no-external-action contract: verified'
+            echo '- Review artifact, completion trace, and evaluation update: verified'
+            echo '- Gateway-backed Ollama and free-only OpenRouter seam: retained'
+            echo '- Superseded visual theme reference: absent'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Record the verified live deployment
@@ -179,19 +254,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh issue comment 29 --repo "${GITHUB_REPOSITORY}" --body "$(cat <<EOF
-          <!-- harnesslab-live-verification -->
-          ## Live deployment verified
+          gh issue comment 31 --repo "${GITHUB_REPOSITORY}" --body "$(cat <<EOF
+          <!-- harnesslab-browser-critic-live-verification -->
+          ## Public browser critic verified
 
-          The public HarnessLab release at https://yashumani.github.io/harnesslab/ passed post-deployment verification.
+          The public HarnessLab release at https://yashumani.github.io/harnesslab/ passed post-deployment execution verification.
 
           - Deployed commit: \`${DEPLOYED_SHA}\`
-          - Taskzen theme and responsive assets: verified
-          - Closed drawer inert and hidden from assistive technology: verified
-          - Open drawer dialog semantics and background inertness: verified
-          - Escape/focus-management implementation: verified
-          - Superseded NeuroNest asset: absent
-          - Bounded critic and browser credential boundary: verified
+          - Browser-local deterministic Architecture Critic: executed successfully
+          - Critic network POST requests: zero
+          - Gateway, OpenRouter, and Ollama requests during local execution: zero
+          - One-worker / one-invocation / no-tools / no-child-agent / no-external-action contract: verified
+          - Review artifact, completion trace, and evaluation update: verified
+          - Model-backed Ollama and free-only OpenRouter paths remain gateway-only
           - Deployment workflow: ${DEPLOY_RUN_URL}
           - Verification workflow: ${VERIFY_RUN_URL}
           EOF

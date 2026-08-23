@@ -3,6 +3,7 @@ import {
   normalizeRuntimeSettings,
   RuntimeModes
 } from './analysis-client.js';
+import { executeBrowserDeterministicCritic } from './browser-critic-runtime.js';
 import { assertHarnessResult } from './result-contract.js';
 import { assertTemporaryWorker } from './temporary-worker-contract.js';
 
@@ -38,6 +39,38 @@ export class CriticGatewayError extends Error {
     this.status = status;
     if (cause) this.cause = cause;
   }
+}
+
+function validateCriticEnvelope(payload, { source = 'Temporary critic' } = {}) {
+  if (!isRecord(payload) || !isRecord(payload.result) || !isRecord(payload.worker)) {
+    throw new CriticGatewayError(`${source} did not include the reviewed harness result and worker artifact.`, {
+      code: 'CRITIC_INVALID_ENVELOPE'
+    });
+  }
+
+  try {
+    assertHarnessResult(payload.result);
+    assertTemporaryWorker(payload.worker);
+    assertTemporaryWorker(payload.result.temporaryWorker);
+  } catch (cause) {
+    throw new CriticGatewayError(`${source} returned a temporary worker result that failed validation.`, {
+      code: 'CRITIC_INVALID_RESULT',
+      cause
+    });
+  }
+  if (payload.worker.id !== payload.result.temporaryWorker.id) {
+    throw new CriticGatewayError(`${source} returned inconsistent temporary worker identifiers.`, {
+      code: 'CRITIC_INVALID_RESULT'
+    });
+  }
+
+  return {
+    result: payload.result,
+    worker: payload.worker,
+    provider: isRecord(payload.provider) ? payload.provider : null,
+    requestId: typeof payload.requestId === 'string' ? payload.requestId : null,
+    metadata: isRecord(payload.metadata) ? payload.metadata : null
+  };
 }
 
 async function fetchCriticJson(fetchImpl, url, result, timeoutMs) {
@@ -92,51 +125,42 @@ async function fetchCriticJson(fetchImpl, url, result, timeoutMs) {
       status: response.status
     });
   }
-  if (!isRecord(payload) || !isRecord(payload.result) || !isRecord(payload.worker)) {
-    throw new CriticGatewayError('Gateway response did not include the reviewed harness result and worker artifact.', {
-      code: 'CRITIC_INVALID_ENVELOPE'
-    });
-  }
-
-  try {
-    assertHarnessResult(payload.result);
-    assertTemporaryWorker(payload.worker);
-    assertTemporaryWorker(payload.result.temporaryWorker);
-  } catch (cause) {
-    throw new CriticGatewayError('Gateway returned a temporary worker result that failed validation.', {
-      code: 'CRITIC_INVALID_RESULT',
-      cause
-    });
-  }
-  if (payload.worker.id !== payload.result.temporaryWorker.id) {
-    throw new CriticGatewayError('Gateway returned inconsistent temporary worker identifiers.', {
-      code: 'CRITIC_INVALID_RESULT'
-    });
-  }
-  return payload;
+  return validateCriticEnvelope(payload, { source: 'Gateway' });
 }
 
-export function createCriticClient({ fetchImpl = globalThis.fetch } = {}) {
+export function createCriticClient({
+  fetchImpl = globalThis.fetch,
+  browserCritic = executeBrowserDeterministicCritic
+} = {}) {
   if (typeof fetchImpl !== 'function') throw new TypeError('A fetch implementation is required.');
+  if (typeof browserCritic !== 'function') throw new TypeError('A browser deterministic critic is required.');
 
   async function critique(result, inputSettings = {}) {
     assertHarnessResult(result);
-    const settings = normalizeRuntimeSettings(inputSettings, { strictGatewayUrl: true });
+    const preliminarySettings = normalizeRuntimeSettings(inputSettings);
+    const settings = preliminarySettings.mode === RuntimeModes.BROWSER
+      ? preliminarySettings
+      : normalizeRuntimeSettings(inputSettings, { strictGatewayUrl: true });
+
     if (settings.mode === RuntimeModes.BROWSER) {
-      throw new CriticGatewayError('Temporary agents require a running HarnessLab gateway. Browser mode remains analysis-only.', {
-        code: 'WORKER_REQUIRES_GATEWAY'
-      });
+      try {
+        const payload = await browserCritic(result, {
+          timeoutMs: Math.max(250, Math.min(60000, settings.timeoutMs))
+        });
+        return emitResult(validateCriticEnvelope(payload, { source: 'Browser deterministic critic' }));
+      } catch (cause) {
+        if (cause instanceof CriticGatewayError) throw cause;
+        throw new CriticGatewayError('The browser deterministic critic could not complete.', {
+          code: typeof cause?.code === 'string' ? cause.code : 'BROWSER_CRITIC_FAILED',
+          cause
+        });
+      }
     }
+
     const gatewayUrl = normalizeGatewayUrl(settings.gatewayUrl);
     const timeoutMs = Math.max(25000, Math.min(60000, settings.timeoutMs));
     const payload = await fetchCriticJson(fetchImpl, `${gatewayUrl}/v1/critique`, result, timeoutMs);
-    return emitResult({
-      result: payload.result,
-      worker: payload.worker,
-      provider: isRecord(payload.provider) ? payload.provider : null,
-      requestId: typeof payload.requestId === 'string' ? payload.requestId : null,
-      metadata: isRecord(payload.metadata) ? payload.metadata : null
-    });
+    return emitResult(payload);
   }
 
   return { critique };
