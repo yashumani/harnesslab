@@ -84,17 +84,44 @@ jobs:
 
           curl --fail --silent http://127.0.0.1:4173/taskzen-shell.js > /tmp/harnesslab-taskzen-shell.js
           grep -q "const DESIGN_ID = 'taskzen'" /tmp/harnesslab-taskzen-shell.js
+          grep -q 'setInert(sidebar, true)' /tmp/harnesslab-taskzen-shell.js
           grep -q 'dataset.uiOverflow' /tmp/harnesslab-taskzen-shell.js
           grep -q 'ui-audit-output' /tmp/harnesslab-taskzen-shell.js
+
+          curl --fail --silent http://127.0.0.1:4173/critic-core.js > /tmp/harnesslab-critic-core.js
+          grep -q 'MAX_CRITIC_CONTEXT_BYTES = 48 \* 1024' /tmp/harnesslab-critic-core.js
+          grep -q 'Temporary critic findings cannot weaken permissions' /tmp/harnesslab-critic-core.js
+          if grep -qi 'fetch(' /tmp/harnesslab-critic-core.js; then
+            echo 'The portable critic core must not perform network access.'
+            exit 1
+          fi
+
+          curl --fail --silent http://127.0.0.1:4173/browser-critic-runtime.js > /tmp/harnesslab-browser-critic.js
+          grep -q 'executeBrowserDeterministicCritic' /tmp/harnesslab-browser-critic.js
+          grep -q "execution: 'browser-local'" /tmp/harnesslab-browser-critic.js
+          grep -q 'networkRequests: 0' /tmp/harnesslab-browser-critic.js
+          if grep -qi 'fetch(' /tmp/harnesslab-browser-critic.js; then
+            echo 'The browser deterministic critic must not perform network access.'
+            exit 1
+          fi
 
           curl --fail --silent http://127.0.0.1:4173/critic-console.js > /tmp/harnesslab-critic.js
           grep -q 'HarnessLabCriticConsole' /tmp/harnesslab-critic.js
           grep -q 'One worker' /tmp/harnesslab-critic.js
+          grep -q 'One local invocation' /tmp/harnesslab-critic.js
           grep -q 'One provider call' /tmp/harnesslab-critic.js
+          grep -q 'Browser local · no network' /tmp/harnesslab-critic.js
           grep -q 'No tools' /tmp/harnesslab-critic.js
           grep -q 'No child agents' /tmp/harnesslab-critic.js
+
           curl --fail --silent http://127.0.0.1:4173/critic-client.js > /tmp/harnesslab-critic-client.js
+          grep -q 'executeBrowserDeterministicCritic' /tmp/harnesslab-critic-client.js
           grep -q '/v1/critique' /tmp/harnesslab-critic-client.js
+          if grep -qi 'authorization:' /tmp/harnesslab-critic-client.js; then
+            echo 'The public critic client must not construct provider authorization.'
+            exit 1
+          fi
+
           curl --fail --silent http://127.0.0.1:4173/critic-console.css > /tmp/harnesslab-critic.css
           grep -q '.critic-drawer' /tmp/harnesslab-critic.css
           grep -qi -- '--critic-cyan: #635bff' /tmp/harnesslab-critic.css
@@ -105,7 +132,47 @@ jobs:
           curl --fail --silent http://127.0.0.1:4173/analysis-client.js > /dev/null
           curl --fail --silent http://127.0.0.1:4173/result-contract.js > /dev/null
 
-      - name: Smoke test analysis and one deterministic temporary critic
+      - name: Smoke test one browser-local deterministic temporary critic
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { RuntimeModes } from './apps/web/analysis-client.js';
+          import { createCriticClient } from './apps/web/critic-client.js';
+          import { analyzeRequirement, examples } from './apps/web/engine.js';
+
+          let fetchCalls = 0;
+          const client = createCriticClient({
+            fetchImpl: async () => {
+              fetchCalls += 1;
+              throw new Error('browser-local critic attempted a network request');
+            }
+          });
+          const response = await client.critique(analyzeRequirement(examples[0].value), {
+            mode: RuntimeModes.BROWSER,
+            gatewayUrl: 'not-required-for-browser-mode',
+            timeoutMs: 5000
+          });
+          const worker = response.worker;
+          if (fetchCalls !== 0
+            || response.metadata?.execution !== 'browser-local'
+            || response.metadata?.networkRequests !== 0
+            || worker?.status !== 'completed'
+            || worker?.provider !== 'deterministic'
+            || worker?.liveModel !== false
+            || worker?.callBudget !== 1
+            || worker?.callsUsed !== 1
+            || worker?.childSpawning !== false
+            || worker?.externalActions !== false
+            || !Array.isArray(worker?.tools)
+            || worker.tools.length !== 0
+            || !response.result?.artifacts?.some((artifact) => artifact.id === worker.artifactId)
+            || !response.result?.trace?.some((entry) => entry.event === 'temporary_agent.completed')) {
+            process.exit(1);
+          }
+          NODE
+
+      - name: Smoke test gateway analysis and one deterministic temporary critic
         shell: bash
         run: |
           set -euo pipefail
