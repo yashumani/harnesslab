@@ -119,6 +119,114 @@ function evaluationValue(result, label) {
   return result.result?.value;
 }
 
+async function evaluate(client, expression, label, { awaitPromise = false } = {}) {
+  const result = await client.send('Runtime.evaluate', {
+    expression,
+    awaitPromise,
+    returnByValue: true
+  });
+  return evaluationValue(result, label);
+}
+
+function drawerSnapshotExpression() {
+  return `(() => {
+    const sidebar = document.querySelector('.sidebar');
+    const main = document.getElementById('main-content');
+    const menu = document.querySelector('.menu-button');
+    return {
+      exists: Boolean(sidebar && main && menu),
+      open: Boolean(sidebar?.classList.contains('sidebar-open')),
+      inert: Boolean(sidebar?.inert),
+      ariaHidden: sidebar?.getAttribute('aria-hidden') ?? null,
+      role: sidebar?.getAttribute('role') ?? null,
+      ariaModal: sidebar?.getAttribute('aria-modal') ?? null,
+      backgroundInert: Boolean(main?.inert),
+      menuExpanded: menu?.getAttribute('aria-expanded') ?? null,
+      menuControls: menu?.getAttribute('aria-controls') ?? null,
+      activeClass: typeof document.activeElement?.className === 'string' ? document.activeElement.className : '',
+      activeLabel: document.activeElement?.getAttribute?.('aria-label') ?? document.activeElement?.textContent?.trim?.() ?? ''
+    };
+  })()`;
+}
+
+async function waitForDrawerState(client, open, label) {
+  return evaluate(client, `new Promise((resolve, reject) => {
+    const started = Date.now();
+    const poll = () => {
+      const sidebar = document.querySelector('.sidebar');
+      const main = document.getElementById('main-content');
+      const menu = document.querySelector('.menu-button');
+      const isOpen = Boolean(sidebar?.classList.contains('sidebar-open'));
+      const ready = ${open}
+        ? isOpen && sidebar?.inert === false && main?.inert === true && menu?.getAttribute('aria-expanded') === 'true'
+        : !isOpen && sidebar?.inert === true && main?.inert === false && menu?.getAttribute('aria-expanded') === 'false';
+      if (ready) {
+        resolve(${drawerSnapshotExpression()});
+        return;
+      }
+      if (Date.now() - started > 5000) {
+        reject(new Error('${label} did not reach the expected state.'));
+        return;
+      }
+      setTimeout(poll, 50);
+    };
+    poll();
+  })`, label, { awaitPromise: true });
+}
+
+async function auditResponsiveDrawer(client) {
+  const initial = await evaluate(client, drawerSnapshotExpression(), 'Initial drawer state');
+  if (width > 1120) return { initial, interactionRequired: false };
+
+  await evaluate(client, `document.querySelector('.menu-button')?.click(); true`, 'Open navigation drawer');
+  const opened = await waitForDrawerState(client, true, 'Open navigation drawer');
+
+  const focusTrap = await evaluate(client, `(() => {
+    const sidebar = document.querySelector('.sidebar');
+    const selector = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    const focusable = [...sidebar.querySelectorAll(selector)].filter((element) => {
+      const style = getComputedStyle(element);
+      return !element.closest('[inert]') && style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+    });
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    last?.focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    const forwardWrapped = document.activeElement === first;
+    first?.focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+    const backwardWrapped = document.activeElement === last;
+    return { controls: focusable.length, forwardWrapped, backwardWrapped };
+  })()`, 'Drawer focus trap');
+
+  await client.send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Escape',
+    code: 'Escape',
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27
+  });
+  await client.send('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key: 'Escape',
+    code: 'Escape',
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27
+  });
+  const closed = await waitForDrawerState(client, false, 'Close navigation drawer');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const restored = await evaluate(client, drawerSnapshotExpression(), 'Restored drawer focus');
+
+  return {
+    initial,
+    interactionRequired: true,
+    opened,
+    focusTrap,
+    closed,
+    restored
+  };
+}
+
 await mkdir(outputDirectory, { recursive: true });
 await waitForDebugger();
 const target = await createTarget();
@@ -148,69 +256,63 @@ try {
   await client.send('Page.navigate', { url });
   await loaded;
 
-  const auditResult = await client.send('Runtime.evaluate', {
-    expression: `new Promise((resolve, reject) => {
-      const started = Date.now();
-      const poll = () => {
-        if (document.body?.dataset?.uiAudit === 'complete') {
-          resolve({
-            body: { ...document.body.dataset },
-            output: document.getElementById('ui-audit-output')?.textContent || '',
-            design: document.documentElement.dataset.design,
-            layout: document.documentElement.dataset.layout
-          });
-          return;
-        }
-        if (Date.now() - started > 10000) {
-          reject(new Error('Viewport audit did not complete.'));
-          return;
-        }
-        setTimeout(poll, 100);
-      };
-      poll();
-    })`,
-    awaitPromise: true,
-    returnByValue: true
-  });
-  const audit = evaluationValue(auditResult, 'Viewport audit');
+  const audit = await evaluate(client, `new Promise((resolve, reject) => {
+    const started = Date.now();
+    const poll = () => {
+      if (document.body?.dataset?.uiAudit === 'complete') {
+        resolve({
+          body: { ...document.body.dataset },
+          output: document.getElementById('ui-audit-output')?.textContent || '',
+          design: document.documentElement.dataset.design,
+          layout: document.documentElement.dataset.layout
+        });
+        return;
+      }
+      if (Date.now() - started > 10000) {
+        reject(new Error('Viewport audit did not complete.'));
+        return;
+      }
+      setTimeout(poll, 100);
+    };
+    poll();
+  })`, 'Viewport audit', { awaitPromise: true });
 
-  const domResult = await client.send('Runtime.evaluate', {
-    expression: 'document.documentElement.outerHTML',
-    returnByValue: true
-  });
-  const dom = evaluationValue(domResult, 'DOM capture');
-
+  const navigationDrawer = await auditResponsiveDrawer(client);
+  const dom = await evaluate(client, 'document.documentElement.outerHTML', 'DOM capture');
   const screenshot = await client.send('Page.captureScreenshot', {
     format: 'png',
     fromSurface: true,
     captureBeyondViewport: false
   });
 
-  const detailsResult = await client.send('Runtime.evaluate', {
-    expression: `({
-      innerWidth,
-      innerHeight,
-      devicePixelRatio,
-      scrollWidth: document.documentElement.scrollWidth,
-      scrollHeight: document.documentElement.scrollHeight,
-      title: document.title,
-      taskzenReady: document.body.dataset.taskzenReady,
-      appMounted: Boolean(document.querySelector('.app-shell')),
-      criticMounted: Boolean(document.querySelector('harnesslab-critic-console'))
-    })`,
-    returnByValue: true
-  });
-  const details = evaluationValue(detailsResult, 'Browser details');
+  const details = await evaluate(client, `({
+    innerWidth,
+    innerHeight,
+    devicePixelRatio,
+    scrollWidth: document.documentElement.scrollWidth,
+    scrollHeight: document.documentElement.scrollHeight,
+    title: document.title,
+    taskzenReady: document.body.dataset.taskzenReady,
+    appMounted: Boolean(document.querySelector('.app-shell')),
+    criticMounted: Boolean(document.querySelector('harnesslab-critic-console'))
+  })`, 'Browser details');
 
   const parsedOutput = audit.output ? JSON.parse(audit.output) : null;
-  const evidence = { name, requestedViewport: { width, height }, details, audit, parsedOutput };
+  const evidence = {
+    name,
+    requestedViewport: { width, height },
+    details,
+    audit,
+    parsedOutput,
+    navigationDrawer
+  };
   await Promise.all([
     writeFile(`${outputDirectory}/${name}.png`, Buffer.from(screenshot.data, 'base64')),
     writeFile(`${outputDirectory}/${name}.html`, dom),
     writeFile(`${outputDirectory}/${name}.json`, `${JSON.stringify(evidence, null, 2)}\n`)
   ]);
 
-  const valid = audit.body.uiAudit === 'complete'
+  const baseValid = audit.body.uiAudit === 'complete'
     && audit.body.uiDesign === 'taskzen'
     && audit.body.uiLayout === name
     && audit.body.uiOverflow === 'false'
@@ -219,8 +321,37 @@ try {
     && details.appMounted
     && details.criticMounted;
 
+  const drawerValid = width > 1120
+    ? navigationDrawer.initial.exists
+      && navigationDrawer.initial.inert === false
+      && navigationDrawer.initial.ariaHidden === null
+      && navigationDrawer.initial.backgroundInert === false
+    : navigationDrawer.initial.exists
+      && navigationDrawer.initial.open === false
+      && navigationDrawer.initial.inert === true
+      && navigationDrawer.initial.ariaHidden === 'true'
+      && navigationDrawer.initial.backgroundInert === false
+      && navigationDrawer.initial.menuExpanded === 'false'
+      && navigationDrawer.opened.open === true
+      && navigationDrawer.opened.inert === false
+      && navigationDrawer.opened.ariaHidden === null
+      && navigationDrawer.opened.role === 'dialog'
+      && navigationDrawer.opened.ariaModal === 'true'
+      && navigationDrawer.opened.backgroundInert === true
+      && navigationDrawer.opened.menuExpanded === 'true'
+      && navigationDrawer.opened.activeClass.includes('sidebar-close')
+      && navigationDrawer.focusTrap.controls > 0
+      && navigationDrawer.focusTrap.forwardWrapped === true
+      && navigationDrawer.focusTrap.backwardWrapped === true
+      && navigationDrawer.closed.open === false
+      && navigationDrawer.closed.inert === true
+      && navigationDrawer.closed.ariaHidden === 'true'
+      && navigationDrawer.closed.backgroundInert === false
+      && navigationDrawer.closed.menuExpanded === 'false'
+      && navigationDrawer.restored.activeClass.includes('menu-button');
+
   console.log(JSON.stringify(evidence, null, 2));
-  if (!valid) process.exitCode = 2;
+  if (!baseValid || !drawerValid) process.exitCode = 2;
 } finally {
   client.close();
 }
