@@ -2,46 +2,71 @@
 
 ## Purpose
 
-HarnessLab's first executed temporary subagent is deliberately narrow: one architecture critic can review an already generated harness plan and return one structured artifact. It proves the temporary-agent lifecycle without adding tools, recursive spawning, code execution, external writes, or production access.
+HarnessLab's first executed temporary subagent is deliberately narrow: one Architecture Critic reviews an already generated `HarnessResult` and returns one structured artifact. It proves the temporary-agent lifecycle without tools, recursive spawning, code execution, files, databases, external writes, or production access.
 
 ```text
 Validated HarnessResult
         ↓
-Minimum context compiler
+Whitelist-only minimum context compiler
         ↓
-One temporary architecture critic
-  - one provider call
+One bounded Architecture Critic
+  - browser-local deterministic, or
+  - gateway deterministic / Ollama / OpenRouter free-only
+  - one invocation
   - no tools
   - no child agents
   - no external actions
-  - fixed deadline
         ↓
-TemporaryAgentReview artifact validator
+TemporaryAgentReview validation
         ↓
 Deterministic finding acceptance
         ↓
 Reviewed HarnessResult
-  - retained artifact
-  - trace events
-  - provider/model/latency metadata
+  - retained review artifact
   - accepted and rejected findings
+  - trace evidence
+  - evaluation update
+  - provider/execution provenance
 ```
 
-This slice operationalizes the principle:
+This slice operationalizes:
 
 > Agents are disposable. Harnesses are durable. Validated artifacts persist.
 
-## User path
+## Execution paths
 
-The public GitHub Pages application continues to generate harness plans in browser-deterministic, automatic-fallback, or gateway-required mode. A separate **Temporary Architecture Critic** console captures the current plan.
+### Browser deterministic
 
-When browser mode is active, the console explains that no worker is executed. When Automatic or Gateway required mode is active and a compatible gateway is running, the console can call:
+The public GitHub Pages application can execute the rule-based critic directly in browser mode.
+
+```text
+No account
+No model
+No provider key
+No gateway
+No critique network request
+```
+
+The browser uses the same portable context, review, merge, artifact, trace, and worker-contract implementation as the gateway. It records:
+
+```json
+{
+  "provider": "deterministic",
+  "liveModel": false,
+  "execution": "browser-local",
+  "networkRequests": 0
+}
+```
+
+### Gateway backed
+
+Automatic and Gateway-required modes call:
 
 ```text
 POST /v1/critique
 ```
 
-The browser request contains exactly one field:
+The request contains only:
 
 ```json
 {
@@ -49,14 +74,37 @@ The browser request contains exactly one field:
 }
 ```
 
-The browser cannot choose the provider, select a model, submit credentials, add tools, or expand the worker task.
+The browser cannot choose the provider, select a model, submit credentials, add tools, or expand the task. The configured gateway may use:
+
+| Provider | Critic behavior |
+|---|---|
+| Deterministic | Rule-based review with no model |
+| Ollama | One local JSON chat request to an explicitly configured model |
+| OpenRouter | One JSON request through `openrouter/free` or an explicit `:free` model |
+
+OpenRouter remains free-only, and provider credentials stay in the gateway environment.
+
+## Shared portable core
+
+`apps/web/critic-core.js` is browser-compatible and shared by the browser and Node gateway. It owns:
+
+- context construction;
+- context byte limits;
+- critic prompt and response schema;
+- deterministic review rules;
+- finding acceptance;
+- review-artifact creation;
+- trace insertion;
+- evaluation updates;
+- preservation of authoritative controls.
+
+The Node gateway adds only SHA-256 hashing, provider transport, request limits, CORS, deadlines, and HTTP error handling.
 
 ## Minimum context envelope
 
-The gateway validates the incoming `HarnessResult` and compiles a whitelist-only context object containing:
+The critic receives only:
 
-- schema version;
-- fixed task and objective;
+- fixed schema version, task, objective, and worker policy;
 - interpreted requirement;
 - complexity, risk, and confidence scores;
 - architecture kind and rationale;
@@ -64,29 +112,24 @@ The gateway validates the incoming `HarnessResult` and compiles a whitelist-only
 - permission matrix;
 - safety constraints;
 - unresolved questions;
-- bounded subagent-plan summaries;
+- bounded planned-agent summaries;
 - artifact types and statuses;
-- evaluation summary;
-- fixed worker policy.
+- evaluation summary.
 
-The context does **not** contain:
+It does **not** receive:
 
-- provider credentials;
-- browser runtime metadata;
-- full chat history;
-- filesystem handles;
-- database connections;
-- MCP clients;
-- A2A peers;
-- tool schemas;
+- provider credentials or authorization;
+- runtime secrets;
+- full browser conversation;
+- tool handles or expanded schemas;
+- filesystem or database access;
+- MCP clients or A2A peers;
 - deployment credentials;
 - production data.
 
-The serialized context is limited to 48 KiB.
+The serialized context is limited to 48 KiB. Browser and gateway paths derive the same SHA-256 context identifier when Web Crypto is available.
 
-## Worker policy
-
-Every execution has the same non-negotiable contract:
+## Non-negotiable worker contract
 
 ```json
 {
@@ -100,28 +143,16 @@ Every execution has the same non-negotiable contract:
 }
 ```
 
-Gateway configuration controls the deadline:
+Gateway execution also applies:
 
 ```text
 HARNESSLAB_CRITIC_TIMEOUT_MS=20000
 HARNESSLAB_CRITIC_MAX_BODY_BYTES=262144
 ```
 
-The gateway process request timeout is always greater than or equal to the critic deadline.
+## Review schema
 
-## Provider behavior
-
-The existing provider abstraction supplies the worker:
-
-| Provider | Critic behavior |
-|---|---|
-| Deterministic | Executes a rule-based independent review with no model |
-| Ollama | Makes one local JSON chat request to the configured model |
-| OpenRouter | Makes one JSON chat-completions request through `openrouter/free` or an explicit `:free` model |
-
-OpenRouter remains free-only. A provider cannot be selected through the request body, and credentials stay in the gateway environment.
-
-The provider must return exactly:
+A model-backed or deterministic provider must produce only:
 
 ```json
 {
@@ -141,7 +172,7 @@ The provider must return exactly:
 }
 ```
 
-Allowed categories are:
+Allowed finding categories:
 
 - `missing_requirement`
 - `reliability`
@@ -150,104 +181,96 @@ Allowed categories are:
 - `safety_gap`
 - `protocol_fit`
 
-At most six findings are accepted from the provider response.
+At most six findings are accepted into the typed review.
 
 ## Deterministic merge policy
 
-Provider output is advice, not authority.
+Critic output is advice, not authority.
 
 A finding is applied only when:
 
-- it satisfies the strict typed schema;
-- its severity is `medium` or `high`;
-- its confidence is at least `0.70`.
+- it satisfies the strict schema;
+- severity is `medium` or `high`;
+- confidence is at least `0.70`.
 
-Low-confidence or low-severity findings remain in the retained review artifact but are not applied.
+Rejected findings remain retained but are not applied.
 
 Accepted findings may only:
 
 - append bounded unresolved questions;
-- append a critic note to the recommendation;
-- add an Architecture critique evaluation dimension;
+- append bounded recommendation notes;
+- add an `Architecture critique` evaluation dimension;
 - add trace evidence;
-- add the retained review artifact.
+- add the retained `TemporaryAgentReview` artifact.
 
-The merge cannot modify or weaken:
+The critic cannot modify or weaken:
 
-- permissions;
-- denied actions;
+- permissions or denied actions;
 - approval requirements;
 - execution stages;
 - protocol decisions;
 - planned subagent contracts;
 - existing safety constraints;
-- artifact retention requirements;
-- traceability requirements.
+- artifact retention;
+- evaluation and traceability requirements.
 
 ## Failure behavior
 
-A provider timeout, unavailability, malformed response, or invalid worker artifact is never presented as success.
+Gateway timeout, provider unavailability, malformed output, and invalid worker artifacts are never presented as success. The gateway retains:
 
-For provider failures that occur after a valid request is accepted, the gateway returns the original harness plan augmented with:
+- a `failed` or `timed_out` worker status;
+- sanitized failure code and message;
+- failed review artifact;
+- failure trace event;
+- zero accepted findings;
+- the original authoritative harness controls.
 
-- `temporaryWorker.status` of `failed` or `timed_out`;
-- a sanitized failure code and message;
-- a retained `TemporaryAgentReview` artifact with failure status;
-- `temporary_agent.failed` or `temporary_agent.timed_out` trace evidence;
-- zero accepted findings.
-
-Invalid request bodies and contract violations return a structured HTTP error.
+The browser deterministic path is synchronous, local, schema-validated, and has no provider transport failure mode. Contract failures are surfaced as an explicit browser critic error; no review is fabricated.
 
 ## Retained worker object
 
-The reviewed result contains an optional `temporaryWorker` object validated by `apps/web/temporary-worker-contract.js`. It records:
+The reviewed result contains a `temporaryWorker` validated by `apps/web/temporary-worker-contract.js`. It records:
 
-- worker ID, role, and fixed task;
-- completion status;
-- provider and routed model;
-- live/free-only policy;
-- start and completion timestamps;
-- latency and deadline;
-- one-call budget and use;
+- worker identity, role, fixed task, and status;
+- provider, model, live/free-only policy;
+- start/completion timestamps, latency, and deadline;
+- one-invocation budget and use;
 - empty tool list;
 - no-child and no-external-action flags;
-- context field names and byte count;
-- retained artifact ID;
-- review;
-- accepted and rejected findings;
-- provider usage metadata;
+- context field names, byte count, and artifact ID;
+- review and accepted/rejected findings;
+- optional provider usage;
 - sanitized failure information when applicable.
 
-## Browser boundary
+## Browser console
 
 The public critic console:
 
 - receives the latest plan through a local custom event;
-- reads only the already stored gateway URL, mode, and timeout metadata;
+- executes locally when browser mode is active;
+- uses the gateway only in Automatic or Gateway-required mode;
 - sends no provider authorization;
-- displays worker status, provenance, context size, artifact ID, and finding decisions;
+- displays execution path, status, provenance, context size, artifact, and finding decisions;
 - can copy or download the reviewed result;
-- can save the reviewed result as a new browser-local project version.
-
-Browser project storage is not encrypted cloud storage or cross-device synchronization.
+- can save it as a new immutable browser-local project version.
 
 ## Verification
 
-The test and deployment system validates:
+The repository verifies:
 
-- context minimization;
-- one-worker and one-call enforcement;
+- browser/gateway context and result parity;
+- browser execution with a fetch function that must never be called;
+- real public-browser execution with CDP network capture;
+- zero POST, `/v1/critique`, OpenRouter, or Ollama request during local critique;
+- one-worker and one-invocation limits;
 - no tools, child agents, or external actions;
-- strict review parsing;
-- deterministic finding acceptance;
-- permission/stage/protocol preservation;
-- timeout evidence;
-- deterministic, Ollama, and OpenRouter critic paths;
-- HTTP endpoint and CORS behavior;
-- browser client validation;
-- public console assets and mobile/reduced-motion CSS;
+- strict review parsing and deterministic finding acceptance;
+- preservation of permissions, stages, protocols, and planned agents;
+- retained artifact, completion trace, and evaluation update;
+- deterministic, Ollama, and free-only OpenRouter gateway paths;
+- desktop, tablet, phone, focus, and reduced-motion behavior;
 - live GitHub Pages publication.
 
 ## Next seam
 
-The next runtime expansion should add multiple independent temporary workers only after this single-worker path produces measurable accuracy or coverage gains. Parallelism must remain bounded by a dependency graph, shared artifact contracts, resource budgets, and an evaluator/judge stage.
+Multiple independent temporary workers should be added only after evaluation evidence shows that the single critic produces measurable accuracy or coverage gains. Future parallelism must remain dependency-aware, budgeted, artifact-driven, and judge-validated.
