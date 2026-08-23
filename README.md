@@ -1,47 +1,64 @@
 # HarnessLab
 
-HarnessLab is an AI-assisted agent harness builder and adaptive swarm runtime for designing, validating, running, and evolving durable agent systems.
+HarnessLab is an AI-assisted agent harness builder and adaptive temporary-agent runtime for designing, validating, running, and evolving durable agent systems.
 
 > **Agents are disposable. Harnesses are durable. Knowledge is retained as structured artifacts.**
 
 ## Live application
 
-The advanced no-build React command center is deployed at:
-
 ```text
 https://yashumani.github.io/harnesslab/
 ```
 
-HarnessLab follows a **deploy-first development cycle**. The current visible path is:
+HarnessLab follows a deploy-first cycle:
 
 ```text
-Project
-  → analysis runtime
-  → requirement interpretation
-  → harness architecture
-  → bounded subagent plan
-  → permissions and artifacts
-  → trace and evaluation
+Requirement
+  → architecture decision
+  → bounded agent plan
+  → permissions and protocols
+  → artifacts and trace
+  → evaluation
   → optional executed architecture critic
   → immutable saved version
 ```
 
-The deployed UI includes:
+The browser experience is a no-build React application. React, ReactDOM, and HTM are pinned and loaded directly; GitHub Pages publishes the reviewed files in `apps/web`.
+
+## Product interface
+
+The current interface is an original HarnessLab product experience based on high-level patterns from the free **Taskzen** AI SaaS template on Framer:
+
+- light professional B2B SaaS presentation;
+- compact product navigation;
+- real HarnessLab architecture output as the hero preview;
+- restrained indigo and teal semantic accents;
+- dashboard-oriented project, runtime, risk, architecture, control, and evidence surfaces;
+- deliberate desktop, tablet, and phone compositions;
+- keyboard focus and reduced-motion support.
+
+No Framer project, template source, screenshot, illustration, icon pack, or proprietary asset is copied into this repository. See [`docs/architecture/FRAMER_TASKZEN_VISUAL_SYSTEM.md`](docs/architecture/FRAMER_TASKZEN_VISUAL_SYSTEM.md).
+
+## Current capabilities
+
+The deployed application includes:
 
 - deterministic requirement interpretation and architecture selection;
-- workflow, single-agent, or temporary-subagent guidance;
-- MCP, A2A, retrieval, and typed-function recommendations;
+- workflow, single-agent, or temporary-subagent recommendations;
+- MCP, A2A, retrieval, and typed-function guidance;
 - bounded planned-agent contracts;
-- permissions and approval gates;
+- capability-level permissions and approval gates;
 - structured artifact identifiers;
 - execution trace and evaluation summary;
-- browser-local projects, immutable harness versions, restore, and JSON backup;
-- provider-neutral runtime controls with browser, automatic-fallback, and gateway-required modes;
-- a live **Temporary Architecture Critic** console for one bounded gateway worker.
+- browser-local projects and immutable harness versions;
+- restore, copy, download, and JSON workspace backup;
+- browser, automatic-fallback, and gateway-required runtime modes;
+- provider-neutral Ollama and free-only OpenRouter gateway adapters;
+- one executable bounded **Temporary Architecture Critic**.
 
 ## First executed temporary worker
 
-The architecture critic is the first subagent HarnessLab can actually execute. It is deliberately constrained:
+The architecture critic is deliberately constrained:
 
 ```text
 One worker
@@ -55,9 +72,9 @@ Structured review only
 
 The critic receives a whitelist-only context envelope containing the requirement, architecture, protocols, permissions, constraints, unresolved questions, bounded planned-agent summaries, artifacts, and evaluation. It does not receive provider credentials, the full browser conversation, filesystem access, databases, MCP clients, A2A peers, deployment credentials, or production data.
 
-A finding is applied only when it passes the typed schema, has `medium` or `high` severity, and has confidence of at least `0.70`. Rejected findings remain in the review artifact for traceability. The deterministic merge cannot weaken permissions, denied actions, approval requirements, stages, protocols, existing constraints, artifacts, or evaluation requirements.
+A finding is applied only when it passes the typed schema, has `medium` or `high` severity, and has confidence of at least `0.70`. Rejected findings remain in the review artifact for traceability. Deterministic merge logic cannot weaken permissions, denied actions, approval requirements, stages, protocols, constraints, artifacts, or evaluation requirements.
 
-Browser-deterministic mode remains analysis-only and executes no worker. To run the critic, start the gateway and select **Automatic** or **Gateway required** in the application.
+Browser-deterministic mode remains analysis-only and executes no worker. To run the critic, start the gateway and select **Automatic** or **Gateway required**.
 
 ## Provider-neutral gateway
 
@@ -82,7 +99,7 @@ The current slice does not execute MCP tools, A2A peers, arbitrary code, files, 
 - Ollama only when explicitly selecting the Ollama provider;
 - an OpenRouter account-created API key only when explicitly selecting the OpenRouter provider.
 
-No package installation is required for the current slices.
+No package installation is required for the current application slices.
 
 ## Run the browser application
 
@@ -107,13 +124,13 @@ In another terminal:
 npm run gateway
 ```
 
-The safe default provider is deterministic. In the browser, set the gateway URL to:
+The safe default provider is deterministic. Set the browser gateway URL to:
 
 ```text
 http://127.0.0.1:8787
 ```
 
-Then select **Automatic** or **Gateway required**, use **Test connection**, generate a plan, and open the critic launcher in the lower-right corner.
+Then select **Automatic** or **Gateway required**, test the connection, generate a plan, and open the critic launcher.
 
 The gateway exposes:
 
@@ -123,22 +140,18 @@ POST /v1/analyze
 POST /v1/critique
 ```
 
-The critic endpoint accepts only a validated harness result. The request cannot choose a provider, select a model, add tools, or expand the worker task.
+The critic endpoint accepts only a validated harness result. The browser request cannot choose a provider, select a model, add tools, or expand the worker task.
 
 ### Temporary critic limits
-
-Defaults:
 
 ```bash
 export HARNESSLAB_CRITIC_TIMEOUT_MS=20000
 export HARNESSLAB_CRITIC_MAX_BODY_BYTES=262144
 ```
 
-The compiled worker context itself is limited to 48 KiB. Every provider receives a one-call budget.
+The compiled worker context is limited to 48 KiB. Every provider receives a one-call budget.
 
 ### Enable an installed Ollama model
-
-Configure values outside the repository:
 
 ```bash
 export HARNESSLAB_PROVIDER=ollama
@@ -147,11 +160,11 @@ export OLLAMA_DEFAULT_MODEL=<installed-local-model-name>
 npm run gateway
 ```
 
-Ollama can supply bounded architecture guidance and one bounded critic review. Deterministic HarnessLab permissions, stages, artifact requirements, safety constraints, finding acceptance, and validation remain authoritative.
+Ollama may supply bounded architecture guidance and one bounded critic review. Deterministic HarnessLab permissions, stages, artifact requirements, safety constraints, finding acceptance, and validation remain authoritative.
 
 ### Enable OpenRouter free models
 
-OpenRouter requires an API key even for free routes. Put it only in the gateway environment:
+OpenRouter requires an API key even for free routes. Keep it only in the gateway environment:
 
 ```bash
 export HARNESSLAB_PROVIDER=openrouter
@@ -167,9 +180,7 @@ openrouter/free
 <provider/model:free>
 ```
 
-A paid or ambiguous model identifier is rejected at gateway startup. There is no paid-model override. The adapter uses the fixed official OpenRouter HTTPS API origin, validates the key without returning its metadata, requests structured JSON, records the actual routed model when available, and preserves deterministic HarnessLab controls.
-
-No OpenRouter account, key, credit purchase, or live request is created automatically by this repository.
+A paid or ambiguous model identifier is rejected at gateway startup. There is no paid-model override. No OpenRouter account, key, credit purchase, or live request is created automatically by this repository.
 
 ## Run the gateway container
 
@@ -178,9 +189,9 @@ docker build -f services/gateway/Dockerfile -t harnesslab-gateway .
 docker run --rm -p 8787:8787 harnesslab-gateway
 ```
 
-The container runs as a non-root user and starts with the deterministic provider. Pass Ollama or OpenRouter settings at runtime; never bake a credential into the image.
+The container runs as a non-root user and starts with the deterministic provider. Pass provider settings at runtime; never bake credentials into the image.
 
-## Test
+## Validation
 
 ```bash
 npm run check
@@ -193,17 +204,29 @@ The suite covers:
 - browser workspace recovery, immutable versions, retention, and backup export;
 - shared harness-result and temporary-worker validation;
 - browser runtime modes, fallback evidence, and gateway identity checks;
-- minimum critic context compilation;
 - one-worker, one-call, no-tools, no-child, and no-external-action enforcement;
-- strict critic review parsing and deterministic finding acceptance;
+- strict critic parsing and deterministic finding acceptance;
 - retained timeout and failure evidence;
-- browser critic-client and console contracts;
-- gateway CORS, body-size, method, timeout, routed-model, and sanitized-error behavior;
+- gateway CORS, body-size, method, timeout, and sanitized-error behavior;
 - deterministic HTTP analysis and critic execution;
-- bounded Ollama and OpenRouter analysis/critic behavior;
+- bounded Ollama and OpenRouter behavior;
 - free-only OpenRouter enforcement;
 - non-root container build;
-- live GitHub Pages assets and responsive critic visual.
+- Taskzen visual-system contracts;
+- exact desktop, tablet, and phone browser audits with screenshots and DOM evidence;
+- public GitHub Pages asset verification.
+
+## Responsive QA
+
+The `UI Viewport Audit` workflow starts the real no-build application and uses Chrome DevTools Protocol to render exact CSS viewports:
+
+```text
+Desktop  1440 × 1100
+Tablet   1024 × 900
+Phone     390 × 844
+```
+
+For each viewport it retains a PNG, rendered DOM, and JSON diagnostics and rejects page overflow, clipped primary controls, undersized primary controls, incorrect layout identity, a missing React application, or a missing critic component.
 
 ## Browser workspace boundary
 
@@ -229,21 +252,24 @@ The GitHub Pages workflow validates and publishes only `apps/web`:
 .github/workflows/deploy-pages.yml
 ```
 
-After deployment, a separate workflow tests the actual public HTML, modules, worker contract, critic visual, and manifest:
+After deployment, separate workflows validate the real public HTML, Taskzen assets, responsive contract, worker contract, critic visual, and manifest:
 
 ```text
 .github/workflows/verify-pages.yml
+.github/workflows/verify-design-theme.yml
+.github/workflows/ui-viewport-audit.yml
 ```
 
 The gateway is independently container-deployable; GitHub Pages hosts only the browser application.
 
-Architecture details:
+## Architecture documentation
 
 - [`docs/architecture/DEPLOY_FIRST.md`](docs/architecture/DEPLOY_FIRST.md)
 - [`docs/architecture/LOCAL_WORKSPACE.md`](docs/architecture/LOCAL_WORKSPACE.md)
 - [`docs/architecture/ANALYSIS_GATEWAY.md`](docs/architecture/ANALYSIS_GATEWAY.md)
 - [`docs/architecture/NO_BUILD_REACT.md`](docs/architecture/NO_BUILD_REACT.md)
 - [`docs/architecture/TEMPORARY_CRITIC.md`](docs/architecture/TEMPORARY_CRITIC.md)
+- [`docs/architecture/FRAMER_TASKZEN_VISUAL_SYSTEM.md`](docs/architecture/FRAMER_TASKZEN_VISUAL_SYSTEM.md)
 
 ## Product direction
 
@@ -266,13 +292,9 @@ HarnessLab will provide:
 2. Spawn temporary intelligence only when the expected benefit exceeds cost and complexity.
 3. Give every subagent minimum necessary context, tools, permissions, time, and budget.
 4. Prefer structured artifacts over unbounded agent-to-agent conversation.
-5. Preserve provider independence through a model and harness abstraction layer.
-6. Treat evaluation, observability, security, and recovery as core architecture—not add-ons.
+5. Preserve provider independence through model and harness abstractions.
+6. Treat evaluation, observability, security, and recovery as core architecture.
 7. Require human approval for destructive, irreversible, financial, security-sensitive, or production-impacting operations.
 8. Deploy a complete user-visible skeleton before replacing its internal seams.
 
-## Repository status
-
-Repository governance, deploy-first CI, the live no-build React command center, durable browser projects, provider-neutral gateway, Ollama, free-only OpenRouter, and one executable bounded temporary critic are developed through pull requests.
-
-No open-source license has been selected yet. Do not assume permission to copy, modify, or redistribute this repository's contents.
+No open-source license has been selected. Do not assume permission to copy, modify, or redistribute this repository's contents.
