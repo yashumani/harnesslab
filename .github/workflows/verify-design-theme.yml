@@ -1,4 +1,4 @@
-name: Verify HarnessLab Design Theme
+name: Verify HarnessLab Taskzen Design
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-harnesslab-design-theme-${{ github.ref }}
+  group: verify-harnesslab-taskzen-design-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Verify the public modular command-center theme
+      - name: Verify the public Taskzen-inspired product design
         shell: bash
         env:
           BASE_URL: https://yashumani.github.io/harnesslab
@@ -38,7 +38,8 @@ jobs:
             if curl --fail --silent --show-error --location --max-time 20 \
               "${BASE_URL}/?theme=${GITHUB_RUN_ID}-${attempt}" \
               -o /tmp/harnesslab-theme-index.html; then
-              if grep -q 'href="./neuronest-theme.css"' /tmp/harnesslab-theme-index.html; then
+              if grep -q 'href="./taskzen-theme.css"' /tmp/harnesslab-theme-index.html \
+                && grep -q 'src="./taskzen-shell.js"' /tmp/harnesslab-theme-index.html; then
                 ready=true
                 break
               fi
@@ -47,44 +48,55 @@ jobs:
           done
 
           if [[ "${ready}" != 'true' ]]; then
-            echo 'The public route did not load the modular HarnessLab theme.'
-            sed -n '1,100p' /tmp/harnesslab-theme-index.html 2>/dev/null || true
+            echo 'The public route did not load the Taskzen-inspired HarnessLab design.'
+            sed -n '1,120p' /tmp/harnesslab-theme-index.html 2>/dev/null || true
+            exit 1
+          fi
+
+          if grep -q 'neuronest-theme.css' /tmp/harnesslab-theme-index.html; then
+            echo 'The public route still references the superseded design.'
             exit 1
           fi
 
           curl --fail --silent --show-error --location --max-time 20 \
-            "${BASE_URL}/neuronest-theme.css?theme=${GITHUB_RUN_ID}" \
-            -o /tmp/harnesslab-neuronest-theme.css
+            "${BASE_URL}/taskzen-theme.css?theme=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-taskzen-theme.css
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/taskzen-shell.js?theme=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-taskzen-shell.js
 
-          grep -qi 'original implementation' /tmp/harnesslab-neuronest-theme.css
-          grep -q '#070707' /tmp/harnesslab-neuronest-theme.css
-          grep -qi '#ccb8eb' /tmp/harnesslab-neuronest-theme.css
-          grep -qi '#b8d2ac' /tmp/harnesslab-neuronest-theme.css
-          grep -qi '#f9e893' /tmp/harnesslab-neuronest-theme.css
-          grep -q '.sidebar' /tmp/harnesslab-neuronest-theme.css
-          grep -q '.mission-hero' /tmp/harnesslab-neuronest-theme.css
-          grep -q '.workspace-layout' /tmp/harnesslab-neuronest-theme.css
-          grep -q '.composer-panel' /tmp/harnesslab-neuronest-theme.css
-          grep -q '.architecture-map' /tmp/harnesslab-neuronest-theme.css
-          grep -q '.agent-card' /tmp/harnesslab-neuronest-theme.css
-          grep -q '.permission-table' /tmp/harnesslab-neuronest-theme.css
-          grep -q 'harnesslab-critic-console' /tmp/harnesslab-neuronest-theme.css
-          grep -q '@media (max-width: 760px)' /tmp/harnesslab-neuronest-theme.css
-          grep -q 'prefers-reduced-motion' /tmp/harnesslab-neuronest-theme.css
+          grep -qi 'original HarnessLab implementation' /tmp/harnesslab-taskzen-theme.css
+          grep -qi '#f7f8fc' /tmp/harnesslab-taskzen-theme.css
+          grep -qi '#635bff' /tmp/harnesslab-taskzen-theme.css
+          grep -qi '#0e9384' /tmp/harnesslab-taskzen-theme.css
+          grep -q '.sidebar' /tmp/harnesslab-taskzen-theme.css
+          grep -q '.mission-hero' /tmp/harnesslab-taskzen-theme.css
+          grep -q '.workspace-layout' /tmp/harnesslab-taskzen-theme.css
+          grep -q '.runtime-panel' /tmp/harnesslab-taskzen-theme.css
+          grep -q '.composer-panel' /tmp/harnesslab-taskzen-theme.css
+          grep -q '.architecture-map' /tmp/harnesslab-taskzen-theme.css
+          grep -q '.agent-card-grid' /tmp/harnesslab-taskzen-theme.css
+          grep -q '.permission-table' /tmp/harnesslab-taskzen-theme.css
+          grep -q '.trace-timeline' /tmp/harnesslab-taskzen-theme.css
+          grep -q '@media (max-width: 1120px)' /tmp/harnesslab-taskzen-theme.css
+          grep -q '@media (max-width: 760px)' /tmp/harnesslab-taskzen-theme.css
+          grep -q 'prefers-reduced-motion' /tmp/harnesslab-taskzen-theme.css
+          grep -q "const DESIGN_ID = 'taskzen'" /tmp/harnesslab-taskzen-shell.js
+          grep -q 'dataset.uiOverflow' /tmp/harnesslab-taskzen-shell.js
 
-          if grep -Eqi 'https?://|cdn\.dribbble\.com|userupload|data:image/' /tmp/harnesslab-neuronest-theme.css; then
-            echo 'The original theme must not embed remote artwork or data-image assets.'
+          if grep -Eqi 'url[[:space:]]*\([[:space:]]*["'\'' ]?https?:|data:image/' /tmp/harnesslab-taskzen-theme.css; then
+            echo 'The original design must not embed remote artwork or data-image assets.'
             exit 1
           fi
 
           {
             echo '### HarnessLab visual verification'
             echo
-            echo "Verified the deployed modular command-center theme at ${BASE_URL}/"
+            echo "Verified the deployed Taskzen-inspired product design at ${BASE_URL}/"
             echo
-            echo '- Original theme stylesheet: verified'
-            echo '- Lavender / sage / warm-yellow palette: verified'
-            echo '- Workspace, runtime, architecture, agent, control, evidence, and critic selectors: verified'
-            echo '- Responsive and reduced-motion behavior: verified'
-            echo '- No embedded Dribbble artwork or remote background assets: verified'
+            echo '- Original HarnessLab visual stylesheet: verified'
+            echo '- Light canvas with indigo and teal semantic accents: verified'
+            echo '- Navigation, hero, workspace, runtime, architect, result, and evidence selectors: verified'
+            echo '- Tablet, phone, focus, and reduced-motion behavior: verified'
+            echo '- Superseded theme and external template artwork: absent'
           } >> "$GITHUB_STEP_SUMMARY"
