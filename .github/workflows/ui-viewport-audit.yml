@@ -1,0 +1,132 @@
+name: UI Viewport Audit
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/ui-viewport-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harnesslab-ui-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  viewport-audit:
+    name: UI / desktop-tablet-phone
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Validate application contracts
+        run: npm run check
+
+      - name: Render and audit desktop, tablet, and phone
+        id: viewport-audit
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p ui-audit
+          failures=0
+
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "$browser" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.' | tee ui-audit/failure.txt
+            exit 1
+          fi
+
+          python3 -m http.server 4173 --directory apps/web > /tmp/harnesslab-ui-http.log 2>&1 &
+          server_pid=$!
+          "$browser" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-port=9222 \
+            --user-data-dir=/tmp/harnesslab-ui-chrome \
+            about:blank > /tmp/harnesslab-ui-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "$server_pid" "$browser_pid" 2>/dev/null || true' EXIT
+
+          ready=false
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null \
+              && curl --fail --silent http://127.0.0.1:9222/json/version > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 0.25
+          done
+          if [[ "$ready" != 'true' ]]; then
+            echo 'The browser application or Chrome debugging endpoint did not start.' | tee ui-audit/failure.txt
+            cat /tmp/harnesslab-ui-http.log 2>/dev/null || true
+            cat /tmp/harnesslab-ui-chrome.log 2>/dev/null || true
+            exit 1
+          fi
+
+          audit_viewport() {
+            local name="$1"
+            local width="$2"
+            local height="$3"
+            local url="http://127.0.0.1:4173/?ui-audit=1&viewport=${name}"
+            echo "Auditing ${name} at ${width}x${height}" | tee -a ui-audit/audit.log
+            if node scripts/capture-ui-viewport.mjs "$name" "$width" "$height" "$url" ui-audit \
+              > "ui-audit/${name}-console.log" 2>&1; then
+              echo "PASS: ${name}" | tee -a ui-audit/audit.log
+            else
+              status=$?
+              echo "FAIL: ${name} (status ${status})" | tee -a ui-audit/audit.log
+              cat "ui-audit/${name}-console.log" || true
+              failures=$((failures + 1))
+            fi
+          }
+
+          audit_viewport desktop 1440 1100
+          audit_viewport tablet 1024 900
+          audit_viewport phone 390 844
+
+          {
+            echo
+            echo "failures=${failures}"
+          } | tee -a ui-audit/audit.log
+
+          {
+            echo '### HarnessLab responsive UI audit'
+            echo
+            if [[ "$failures" -eq 0 ]]; then
+              echo '- Desktop 1440×1100: Taskzen layout active; no overflow, clipping, or undersized primary controls'
+              echo '- Tablet 1024×900: drawer layout active; no overflow, clipping, or undersized primary controls'
+              echo '- Phone 390×844: phone layout active; no overflow, clipping, or undersized primary controls'
+            else
+              echo "- The browser audit found ${failures} failing viewport(s)."
+              echo '- Exact JSON diagnostics, rendered DOM, console output, and screenshots are retained in the workflow artifact.'
+            fi
+            echo '- Evidence is retained in the `harnesslab-taskzen-ui-audit` artifact.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$failures" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload rendered UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-taskzen-ui-audit
+          path: ui-audit
+          if-no-files-found: warn
+          retention-days: 30
