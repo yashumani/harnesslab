@@ -1,0 +1,103 @@
+name: Browser Critic Integration
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'scripts/verify-live-browser-critic.mjs'
+      - 'tests/**'
+      - '.github/workflows/browser-critic-integration.yml'
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-critic-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-critic:
+    name: Critic / browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Validate browser critic modules
+        run: |
+          node --check apps/web/critic-core.js
+          node --check apps/web/browser-critic-runtime.js
+          node --check apps/web/critic-client.js
+          node --check apps/web/critic-console.js
+          node --check scripts/verify-live-browser-critic.mjs
+
+      - name: Execute the critic through the real browser UI
+        shell: bash
+        env:
+          CHROME_DEBUG_PORT: '9224'
+        run: |
+          set -euo pipefail
+          mkdir -p browser-critic-evidence
+
+          python3 -m http.server 4174 --directory apps/web > /tmp/harnesslab-browser-critic-http.log 2>&1 &
+          server_pid=$!
+
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "${browser}" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.'
+            exit 1
+          fi
+
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-port=9224 \
+            --user-data-dir=/tmp/harnesslab-browser-critic-chrome \
+            about:blank > /tmp/harnesslab-browser-critic-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${server_pid}" "${browser_pid}" 2>/dev/null || true' EXIT
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4174/ > /dev/null \
+              && curl --fail --silent http://127.0.0.1:9224/json/version > /dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          node scripts/verify-live-browser-critic.mjs \
+            'http://127.0.0.1:4174/?browser-critic-integration=1' \
+            browser-critic-evidence/result.json
+
+      - name: Upload browser critic evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-browser-critic-integration
+          path: browser-critic-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summarize the execution boundary
+        shell: bash
+        run: |
+          {
+            echo '### Browser-local Architecture Critic'
+            echo
+            echo '- Real no-build React UI: mounted'
+            echo '- Deterministic critic: completed'
+            echo '- Critic POST and gateway requests: zero'
+            echo '- Tools, child agents, and external actions: unavailable'
+            echo '- Review artifact, completion trace, and evaluation update: verified'
+          } >> "$GITHUB_STEP_SUMMARY"
