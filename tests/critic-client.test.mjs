@@ -40,7 +40,7 @@ function reviewedEnvelope() {
   };
 }
 
-test('browser mode does not execute a temporary worker or call fetch', async () => {
+test('browser mode executes one deterministic critic locally without calling fetch', async () => {
   let fetchCalls = 0;
   const client = createCriticClient({
     fetchImpl: async () => {
@@ -49,18 +49,27 @@ test('browser mode does not execute a temporary worker or call fetch', async () 
     }
   });
 
-  await assert.rejects(
-    client.critique(analyzeRequirement(examples[0].value), {
-      mode: RuntimeModes.BROWSER,
-      gatewayUrl: 'http://127.0.0.1:8787',
-      timeoutMs: 5000
-    }),
-    (error) => error instanceof CriticGatewayError && error.code === 'WORKER_REQUIRES_GATEWAY'
-  );
+  const response = await client.critique(analyzeRequirement(examples[0].value), {
+    mode: RuntimeModes.BROWSER,
+    gatewayUrl: 'not-used-and-not-required',
+    timeoutMs: 5000
+  });
+
   assert.equal(fetchCalls, 0);
+  assert.equal(response.worker.status, 'completed');
+  assert.equal(response.worker.provider, 'deterministic');
+  assert.equal(response.worker.liveModel, false);
+  assert.equal(response.worker.callBudget, 1);
+  assert.equal(response.worker.callsUsed, 1);
+  assert.equal(response.worker.childSpawning, false);
+  assert.equal(response.worker.externalActions, false);
+  assert.deepEqual(response.worker.tools, []);
+  assert.equal(response.metadata.execution, 'browser-local');
+  assert.equal(response.metadata.networkRequests, 0);
+  assert.match(response.requestId, /^LOCAL-[A-F0-9]{12}$/);
 });
 
-test('calls only the bounded critic endpoint and validates the worker envelope', async () => {
+test('calls only the bounded critic endpoint for gateway modes and validates the worker envelope', async () => {
   const envelope = reviewedEnvelope();
   const requests = [];
   const client = createCriticClient({
@@ -90,7 +99,7 @@ test('calls only the bounded critic endpoint and validates the worker envelope',
   assert.equal(response.requestId, 'REQ-critic-1');
 });
 
-test('rejects invalid or inconsistent worker envelopes', async () => {
+test('rejects invalid or inconsistent gateway worker envelopes', async () => {
   const envelope = reviewedEnvelope();
   envelope.worker.id = 'DIFFERENT-ID';
   const client = createCriticClient({
