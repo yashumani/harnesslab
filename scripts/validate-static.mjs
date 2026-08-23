@@ -4,6 +4,8 @@ import { constants } from 'node:fs';
 const requiredFiles = [
   'apps/web/index.html',
   'apps/web/react-app.css',
+  'apps/web/taskzen-theme.css',
+  'apps/web/taskzen-shell.js',
   'apps/web/app.js',
   'apps/web/engine.js',
   'apps/web/workspace-store.js',
@@ -27,12 +29,15 @@ const requiredFiles = [
   'services/gateway/providers/provider-http.mjs',
   'services/gateway/server.mjs',
   'services/gateway/Dockerfile',
+  'scripts/capture-ui-viewport.mjs',
   'docs/architecture/ANALYSIS_GATEWAY.md',
   'docs/architecture/NO_BUILD_REACT.md',
   'docs/architecture/TEMPORARY_CRITIC.md',
+  'docs/architecture/FRAMER_TASKZEN_VISUAL_SYSTEM.md',
   '.github/workflows/application-ci.yml',
   '.github/workflows/deploy-pages.yml',
-  '.github/workflows/verify-pages.yml'
+  '.github/workflows/verify-pages.yml',
+  '.github/workflows/ui-viewport-audit.yml'
 ];
 
 for (const path of requiredFiles) {
@@ -42,6 +47,8 @@ for (const path of requiredFiles) {
 const html = await readFile('apps/web/index.html', 'utf8');
 const app = await readFile('apps/web/app.js', 'utf8');
 const visualCss = await readFile('apps/web/react-app.css', 'utf8');
+const taskzenTheme = await readFile('apps/web/taskzen-theme.css', 'utf8');
+const taskzenShell = await readFile('apps/web/taskzen-shell.js', 'utf8');
 const engine = await readFile('apps/web/engine.js', 'utf8');
 const workspace = await readFile('apps/web/workspace-store.js', 'utf8');
 const analysisClient = await readFile('apps/web/analysis-client.js', 'utf8');
@@ -60,12 +67,15 @@ const providerHttp = await readFile('services/gateway/providers/provider-http.mj
 const ollama = await readFile('services/gateway/providers/ollama.mjs', 'utf8');
 const openrouter = await readFile('services/gateway/providers/openrouter.mjs', 'utf8');
 const dockerfile = await readFile('services/gateway/Dockerfile', 'utf8');
+const captureViewport = await readFile('scripts/capture-ui-viewport.mjs', 'utf8');
 const deploy = await readFile('.github/workflows/deploy-pages.yml', 'utf8');
 const verifyPages = await readFile('.github/workflows/verify-pages.yml', 'utf8');
+const viewportAudit = await readFile('.github/workflows/ui-viewport-audit.yml', 'utf8');
 
 const browserBundle = [
   html,
   app,
+  taskzenShell,
   engine,
   workspace,
   analysisClient,
@@ -74,12 +84,19 @@ const browserBundle = [
   resultContract,
   workerContract
 ].join('\n');
+
 const checks = [
   [html.includes('id="root"'), 'index must provide the React mount root'],
   [html.includes('href="./react-app.css"'), 'index must load the repository-relative React visual stylesheet'],
+  [html.includes('href="./taskzen-theme.css"'), 'index must load the Taskzen-inspired visual system'],
+  [!html.includes('neuronest-theme.css'), 'index must not load the superseded NeuroNest theme'],
+  [html.includes('type="module" src="./taskzen-shell.js"'), 'index must load the responsive Taskzen browser shell'],
   [html.includes('type="module" src="./app.js"'), 'index must use a repository-relative application module'],
   [html.includes('type="module" src="./critic-console.js"'), 'index must load the executable critic console module'],
+  [html.indexOf('src="./taskzen-shell.js"') < html.indexOf('src="./critic-console.js"'), 'the visual shell must initialize before the critic console'],
   [html.indexOf('src="./critic-console.js"') < html.indexOf('src="./app.js"'), 'critic console must subscribe before the main application publishes its initial result'],
+  [html.includes('data-design="taskzen"'), 'index must disclose the active design identity'],
+  [html.includes('HarnessLab — AI Agent Harness Builder'), 'index must expose the product title'],
   [html.includes('react@18.3.1/umd/react.production.min.js'), 'index must pin the React no-build runtime'],
   [html.includes('react-dom@18.3.1/umd/react-dom.production.min.js'), 'index must pin the ReactDOM no-build runtime'],
   [html.includes('htm@3.1.1/dist/htm.umd.js'), 'index must pin the HTM no-build template runtime'],
@@ -92,11 +109,41 @@ const checks = [
   [app.includes("from './workspace-store.js'"), 'React app must preserve the replaceable workspace store'],
   [app.includes('planned, not executed'), 'React app must disclose that general planned subagents are not executed'],
   [app.includes('No provider keys in browser'), 'React app must disclose the provider credential boundary'],
-  [visualCss.includes('.architecture-map'), 'visual stylesheet must define the architecture map'],
-  [visualCss.includes('.agent-card-grid'), 'visual stylesheet must define temporary-agent cards'],
-  [visualCss.includes('.permission-table'), 'visual stylesheet must define the permission matrix'],
-  [visualCss.includes('.trace-timeline'), 'visual stylesheet must define the trace timeline'],
-  [visualCss.includes('.evaluation-ring'), 'visual stylesheet must define the evaluation visual'],
+  [visualCss.includes('.architecture-map'), 'functional stylesheet must define the architecture map'],
+  [visualCss.includes('.agent-card-grid'), 'functional stylesheet must define temporary-agent cards'],
+  [visualCss.includes('.permission-table'), 'functional stylesheet must define the permission matrix'],
+  [visualCss.includes('.trace-timeline'), 'functional stylesheet must define the trace timeline'],
+  [visualCss.includes('.evaluation-ring'), 'functional stylesheet must define the evaluation visual'],
+  [taskzenTheme.includes('--cyan: #635bff'), 'Taskzen theme must define the primary indigo accent'],
+  [taskzenTheme.includes('--teal: #0e9384'), 'Taskzen theme must define the secondary teal accent'],
+  [taskzenTheme.includes('--bg-0: #f7f8fc'), 'Taskzen theme must define the light canvas'],
+  [taskzenTheme.includes('.sidebar'), 'Taskzen theme must redesign navigation'],
+  [taskzenTheme.includes('.mission-hero'), 'Taskzen theme must redesign the product hero'],
+  [taskzenTheme.includes('.workspace-layout'), 'Taskzen theme must redesign the project workspace'],
+  [taskzenTheme.includes('.runtime-panel'), 'Taskzen theme must redesign runtime configuration'],
+  [taskzenTheme.includes('.composer-panel'), 'Taskzen theme must redesign requirement entry'],
+  [taskzenTheme.includes('.architecture-map'), 'Taskzen theme must redesign architecture evidence'],
+  [taskzenTheme.includes('.permission-table'), 'Taskzen theme must redesign governance evidence'],
+  [taskzenTheme.includes('@media (max-width: 1120px)'), 'Taskzen theme must include tablet navigation behavior'],
+  [taskzenTheme.includes('@media (max-width: 760px)'), 'Taskzen theme must include phone composition'],
+  [taskzenTheme.includes('prefers-reduced-motion'), 'Taskzen theme must respect reduced-motion preferences'],
+  [!taskzenTheme.includes('neuronest'), 'Taskzen theme must not depend on the superseded design layer'],
+  [!(/url\s*\(\s*["']?https?:|data:image\//i.test(taskzenTheme)), 'Taskzen theme must not embed remote or data-image artwork'],
+  [taskzenShell.includes("const DESIGN_ID = 'taskzen'"), 'Taskzen shell must expose a stable design identity'],
+  [taskzenShell.includes("return 'phone'"), 'Taskzen shell must classify phone layout'],
+  [taskzenShell.includes("return 'tablet'"), 'Taskzen shell must classify tablet layout'],
+  [taskzenShell.includes("return 'desktop'"), 'Taskzen shell must classify desktop layout'],
+  [taskzenShell.includes('dataset.uiOverflow'), 'Taskzen shell must report horizontal overflow'],
+  [taskzenShell.includes('dataset.uiUndersized'), 'Taskzen shell must report touch-target failures'],
+  [taskzenShell.includes('dataset.uiClipped'), 'Taskzen shell must report clipped controls'],
+  [taskzenShell.includes('ui-audit-output'), 'Taskzen shell must retain browser audit evidence'],
+  [captureViewport.includes('Emulation.setDeviceMetricsOverride'), 'viewport capture must use exact CDP viewport emulation'],
+  [captureViewport.includes('Page.captureScreenshot'), 'viewport capture must retain image evidence'],
+  [captureViewport.includes('uiDesign === \'taskzen\''), 'viewport capture must validate design identity'],
+  [viewportAudit.includes('audit_viewport desktop 1440 1100'), 'viewport workflow must audit desktop'],
+  [viewportAudit.includes('audit_viewport tablet 1024 900'), 'viewport workflow must audit tablet'],
+  [viewportAudit.includes('audit_viewport phone 390 844'), 'viewport workflow must audit phone'],
+  [viewportAudit.includes('harnesslab-taskzen-ui-audit'), 'viewport workflow must retain responsive evidence'],
   [analysisClient.includes('harnesslab:analysis-result'), 'analysis client must publish results for the bounded critic console'],
   [criticClient.includes('/v1/critique'), 'critic client must call only the bounded worker endpoint'],
   [criticClient.includes('WORKER_REQUIRES_GATEWAY'), 'critic client must keep browser mode analysis-only'],
@@ -110,6 +157,7 @@ const checks = [
   [criticCss.includes('.finding-card'), 'critic visual must define retained finding cards'],
   [criticCss.includes('@media (max-width: 760px)'), 'critic visual must be mobile responsive'],
   [criticCss.includes('prefers-reduced-motion'), 'critic visual must respect reduced-motion settings'],
+  [criticCss.includes('--critic-cyan: #635bff'), 'critic visual must use the shared indigo product accent'],
   [!browserBundle.includes('OPENROUTER_API_KEY'), 'browser assets must not reference the OpenRouter credential variable'],
   [!browserBundle.toLowerCase().includes('authorization: bearer'), 'browser assets must not construct provider authorization'],
   [analysisClient.includes('GATEWAY_INVALID_RESULT'), 'analysis client must reject invalid gateway results'],
@@ -177,6 +225,8 @@ for (const [name, content] of [
   ['index', html],
   ['app', app],
   ['react-css', visualCss],
+  ['taskzen-theme', taskzenTheme],
+  ['taskzen-shell', taskzenShell],
   ['engine', engine],
   ['workspace', workspace],
   ['analysis-client', analysisClient],
@@ -195,12 +245,14 @@ for (const [name, content] of [
   ['ollama', ollama],
   ['openrouter', openrouter],
   ['dockerfile', dockerfile],
+  ['capture-viewport', captureViewport],
   ['deploy', deploy],
-  ['verify-pages', verifyPages]
+  ['verify-pages', verifyPages],
+  ['viewport-audit', viewportAudit]
 ]) {
   for (const pattern of forbiddenPatterns) {
     if (pattern.test(content)) throw new Error(`Potential secret found in ${name}`);
   }
 }
 
-console.log(`Validated ${requiredFiles.length} no-build React, temporary-worker, application, and gateway files.`);
+console.log(`Validated ${requiredFiles.length} no-build React, Taskzen UI, temporary-worker, application, and gateway files.`);

@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="HarnessLab logo">
   <defs>
-    <linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#49d7ff"/>
-      <stop offset="1" stop-color="#a87bff"/>
+    <linearGradient id="g" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#635BFF"/>
+      <stop offset="1" stop-color="#0E9384"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="16" fill="#0d192a"/>
-  <rect x="4" y="4" width="56" height="56" rx="13" fill="none" stroke="url(#g)" stroke-width="2" opacity=".8"/>
+  <rect width="64" height="64" rx="17" fill="#F7F8FC"/>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#FFFFFF" stroke="#D8D5FF" stroke-width="2"/>
   <path d="M19 17v30h7V35h12v12h7V17h-7v11H26V17z" fill="url(#g)"/>
 </svg>
