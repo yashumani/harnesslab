@@ -1,3 +1,4 @@
+import { validateAgentDecision } from './agent-decision.js';
 import { validateRequirementIntelligence } from './requirement-intelligence.js';
 
 const MAX_COLLECTION_SIZE = 64;
@@ -164,6 +165,20 @@ export function validateHarnessResult(value) {
     const validation = validateRequirementIntelligence(value.requirementAnalysis);
     if (!validation.valid) {
       errors.push(...validation.errors.map((error) => `requirementAnalysis: ${error}`));
+    }
+  }
+
+  if ('agentDecision' in value && value.agentDecision !== null) {
+    const validation = validateAgentDecision(value.agentDecision);
+    if (!validation.valid) {
+      errors.push(...validation.errors.map((error) => `agentDecision: ${error}`));
+    }
+    if (validation.valid && isRecord(value.architecture) && value.architecture.kind !== value.agentDecision.selected.label) {
+      errors.push('architecture.kind must match the retained agentDecision selection.');
+    }
+    if (validation.valid && Array.isArray(value.subagents)) {
+      const multiAgent = ['temporary-subagents', 'external-agent-network'].includes(value.agentDecision.selected.mode);
+      if (!multiAgent && value.subagents.length > 0) errors.push('non-multi-agent decisions cannot retain planned temporary subagents.');
     }
   }
 
