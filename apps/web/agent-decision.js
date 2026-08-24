@@ -22,6 +22,8 @@ const TOP_LEVEL_FIELDS = new Set([
   'alternatives', 'protocols', 'autonomy', 'readiness'
 ]);
 
+const EXTERNAL_NEGATION_PATTERN = /\b(?:(?:do not|don't|must not|never|without|no)\s+(?:use\s+)?(?:any\s+)?(?:external agents?|partner agents?|remote agents?|independent agents?|third[- ]party agents?|agent[- ]to[- ]agent|a2a)|(?:all|every)\s+(?:workers?|agents?)\s+(?:must\s+)?remain\s+internal|internal\s+(?:workers?|agents?)\s+only)\b/i;
+
 const FACTORS = Object.freeze([
   {
     id: 'interpretation',
@@ -79,7 +81,7 @@ const FACTORS = Object.freeze([
     label: 'External-agent trust boundary',
     weight: 14,
     patterns: [
-      /\b(a2a|agent[- ]to[- ]agent|remote agent|partner agent|external agent|independent agent service|separately operated agent)\b/i
+      /\b(a2a|agent[- ]to[- ]agent|remote agents?|partner agents?|external agents?|independent agent services?|separately operated agents?)\b/i
     ],
     effect: 'A2A is for separately operated agents, not internal temporary workers.'
   },
@@ -139,6 +141,18 @@ function evidenceFor(segments, patterns) {
 
 function factorAssessment(definition, requirement, segments) {
   const normalized = normalizeForMatch(requirement);
+  if (definition.id === 'externalBoundary' && EXTERNAL_NEGATION_PATTERN.test(normalized)) {
+    return {
+      id: definition.id,
+      label: definition.label,
+      weight: definition.weight,
+      state: 'absent',
+      score: 0,
+      evidence: [],
+      effect: 'The requirement explicitly prohibits external agents or A2A, so all workers remain inside one harness.'
+    };
+  }
+
   const matchedPatterns = definition.patterns.filter((pattern) => pattern.test(normalized)).length;
   const evidence = evidenceFor(segments, definition.patterns);
   const score = Math.min(100, matchedPatterns * 55 + Math.max(0, evidence.length - 1) * 20);
