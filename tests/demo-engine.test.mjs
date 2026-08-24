@@ -16,15 +16,18 @@ test('returns a deterministic result for the same requirement', () => {
   assert.deepEqual(first, second);
   assert.match(first.runId, /^DEMO-[A-F0-9]{8}$/);
   assert.equal(first.mode, 'Deterministic demo — no live model or external tool execution');
+  assert.match(first.requirementAnalysis.analysisId, /^REQI-[A-F0-9]{8}$/);
 });
 
-test('keeps a narrow request simple', () => {
+test('keeps a narrow request simple and marks missing requirement dimensions', () => {
   const result = analyzeRequirement('Summarize a short meeting note into three action items.');
 
   assert.ok(result.scores.complexity < 58);
   assert.equal(result.subagents.length, 0);
   assert.match(result.architecture.kind, /LLM feature|Deterministic workflow/);
   assert.equal(result.permissions.find((item) => item.capability === 'Production deployment or deletion').policy, 'Deny');
+  assert.ok(result.requirementAnalysis.counts.missing > 0);
+  assert.ok(result.unresolvedQuestions.length > 0);
 });
 
 test('plans bounded temporary agents for a complex data investigation', () => {
@@ -38,6 +41,8 @@ test('plans bounded temporary agents for a complex data investigation', () => {
   assert.ok(result.subagents.every((agent) => agent.timeoutSeconds > 0));
   assert.ok(result.protocols.some((protocol) => protocol.name.includes('MCP')));
   assert.ok(result.artifacts.some((artifact) => artifact.type === 'HarnessSpec'));
+  assert.ok(result.artifacts.some((artifact) => artifact.type === 'RequirementAssessment'));
+  assert.ok(result.trace.some((entry) => entry.event === 'requirement.assessed'));
   assert.ok(result.trace.some((entry) => entry.event === 'subagents.planned'));
 });
 
@@ -70,7 +75,8 @@ test('evaluation and trace contracts remain complete', () => {
   const result = analyzeRequirement(examples[2].value);
 
   assert.equal(result.evaluation.dimensions.length, 4);
+  assert.equal(result.evaluation.dimensions[0].score, result.requirementAnalysis.score);
   assert.ok(result.evaluation.overall >= 0 && result.evaluation.overall <= 100);
   assert.equal(result.trace.at(-1).event, 'response.ready');
-  assert.ok(result.constraints.some((constraint) => constraint.includes('does not execute live models')));
+  assert.ok(result.constraints.some((constraint) => constraint.includes('does not execute external tools')));
 });
