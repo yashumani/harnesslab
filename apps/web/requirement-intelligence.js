@@ -142,7 +142,7 @@ const CONTRADICTION_RULES = Object.freeze([
     statement: 'The requirement asks for full autonomy while also requiring human approval for every action.',
     question: 'Which actions are genuinely autonomous, and which exact actions require approval?',
     left: /\b(fully autonomous|full autonomy|without human intervention|no human involvement)\b/i,
-    right: /\b(human|manual)\s+approval\s+(before|for)\s+(every|any|all)\s+(action|step|operation)|approve\s+(every|all)\s+(action|step|operation)\b/i
+    right: /\b(?:(?:human|manual)\s+approval(?:\s+is)?\s+(?:required\s+)?(?:before|for)\s+(?:every|any|all)\s+(?:action|step|operation)|(?:every|any|all)\s+(?:action|step|operation)\s+(?:requires?|needs?)\s+(?:human|manual)\s+approval|approve\s+(?:every|all)\s+(?:action|step|operation))\b/i
   },
   {
     id: 'read-only-vs-required-mutation',
