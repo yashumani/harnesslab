@@ -1,6 +1,7 @@
 import { access, readFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 
+const COMPOSER_SELECTOR_LITERAL = 'textarea[aria-label="Agent system requirement"]';
 const requiredFiles = [
   'apps/web/requirement-intelligence.js',
   'apps/web/requirement-intelligence-panel.js',
@@ -54,7 +55,7 @@ const checks = [
   [engine.includes("from './requirement-intelligence.js'"), 'planner must import requirement intelligence'],
   [engine.includes('requirementAnalysis,'), 'planner must retain the assessment in HarnessResult'],
   [engine.includes("type: 'RequirementAssessment'"), 'planner must retain a requirement assessment artifact'],
-  [engine.includes("event: 'requirement.assessed'") || engine.includes("'requirement.assessed'"), 'planner trace must record requirement assessment'],
+  [engine.includes("'requirement.assessed'"), 'planner trace must record requirement assessment'],
   [resultContract.includes("from './requirement-intelligence.js'"), 'result contract must validate assessment when present'],
   [resultContract.includes("'requirementAnalysis' in value"), 'legacy results without an assessment must remain readable']
 ];
@@ -63,15 +64,11 @@ for (const [condition, message] of checks) {
   if (!condition) throw new Error(message);
 }
 
-for (const [name, source] of [['panel stylesheet', css]]) {
-  const openings = [...source.matchAll(/\{/g)].length;
-  const closings = [...source.matchAll(/\}/g)].length;
-  if (openings !== closings) throw new Error(`${name} braces are unbalanced`);
-  if (/url\s*\(\s*["']?https?:|data:image\//i.test(source)) {
-    throw new Error(`${name} must not embed remote or data-image artwork`);
-  }
+const openings = [...css.matchAll(/\{/g)].length;
+const closings = [...css.matchAll(/\}/g)].length;
+if (openings !== closings) throw new Error('panel stylesheet braces are unbalanced');
+if (/url\s*\(\s*["']?https?:|data:image\//i.test(css)) {
+  throw new Error('panel stylesheet must not embed remote or data-image artwork');
 }
 
 console.log('Validated deterministic requirement intelligence, retained result contract, coach UI, and responsive boundaries.');
-
-const COMPOSER_SELECTOR_LITERAL = 'textarea[aria-label="Agent system requirement"]';
