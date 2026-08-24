@@ -6,19 +6,33 @@ const requiredFiles = [
   'apps/web/requirement-intelligence.js',
   'apps/web/requirement-intelligence-panel.js',
   'apps/web/requirement-intelligence-panel.css',
+  'apps/web/requirement-intelligence-hardening.css',
   'tests/requirement-intelligence.test.mjs',
-  'tests/requirement-contradictions.test.mjs'
+  'tests/requirement-contradictions.test.mjs',
+  'tests/requirement-intelligence-hardening.test.mjs',
+  '.github/workflows/verify-requirement-intelligence.yml'
 ];
 
 for (const path of requiredFiles) await access(path, constants.R_OK);
 
-const [html, intelligence, panel, css, engine, resultContract] = await Promise.all([
+const [
+  html,
+  intelligence,
+  panel,
+  css,
+  hardeningCss,
+  engine,
+  resultContract,
+  liveVerification
+] = await Promise.all([
   readFile('apps/web/index.html', 'utf8'),
   readFile('apps/web/requirement-intelligence.js', 'utf8'),
   readFile('apps/web/requirement-intelligence-panel.js', 'utf8'),
   readFile('apps/web/requirement-intelligence-panel.css', 'utf8'),
+  readFile('apps/web/requirement-intelligence-hardening.css', 'utf8'),
   readFile('apps/web/engine.js', 'utf8'),
-  readFile('apps/web/result-contract.js', 'utf8')
+  readFile('apps/web/result-contract.js', 'utf8'),
+  readFile('.github/workflows/verify-requirement-intelligence.yml', 'utf8')
 ]);
 
 const panelIndex = html.indexOf('src="./requirement-intelligence-panel.js"');
@@ -31,9 +45,13 @@ const checks = [
   [intelligence.includes('const DIMENSIONS'), 'intelligence engine must define requirement dimensions'],
   [intelligence.includes('MAX_DIMENSIONS = 10'), 'intelligence engine must retain ten dimensions'],
   [intelligence.includes('sourcePolicy'), 'intelligence engine must disclose source-only evidence'],
-  [intelligence.includes('contradictionAssessment'), 'intelligence engine must evaluate contradictions'],
+  [intelligence.includes('findContradictionPair'), 'intelligence engine must scope contradiction pairs'],
+  [intelligence.includes("scope: 'resource'"), 'resource-specific contradiction rules are required'],
+  [intelligence.includes('splitScopeClauses'), 'resource-scoped clauses are required'],
   [intelligence.includes('prioritizedQuestions'), 'intelligence engine must prioritize follow-up questions'],
   [intelligence.includes('validateRequirementIntelligence'), 'intelligence engine must expose a typed validator'],
+  [intelligence.includes('countStatuses'), 'derived count validation is required'],
+  [intelligence.includes('disagrees with dimensions'), 'count and brief consistency errors are required'],
   [intelligence.includes('Evidence is quoted only from the supplied requirement'), 'unsupported facts must remain missing'],
   [!intelligence.includes('fetch('), 'requirement intelligence must not make network requests'],
   [!intelligence.includes('OPENROUTER_API_KEY'), 'requirement intelligence must not reference provider credentials'],
@@ -44,6 +62,12 @@ const checks = [
   [panel.includes('Ten requirement dimensions'), 'coach must expose the complete evidence map'],
   [panel.includes('Explicit contradictions'), 'coach must expose contradictions'],
   [panel.includes('Prioritized questions'), 'coach must expose guided interview questions'],
+  [panel.includes('setBackgroundInert(true)') && panel.includes('setBackgroundInert(false)'), 'coach must manage background inertness'],
+  [panel.includes("event.key === 'Escape'") && panel.includes("event.key !== 'Tab'"), 'coach must manage Escape and focus trapping'],
+  [panel.includes('aria-modal="true"'), 'coach drawer must expose modal semantics'],
+  [panel.includes('this.retainedAnalysis = null'), 'legacy results must clear stale retained analysis'],
+  [panel.includes('characterData: true') && panel.includes('textarea.value !== this.requirement'), 'programmatic requirement changes must refresh the coach'],
+  [panel.includes('requirement-intelligence-hardening.css'), 'coach must load the hardening visual layer'],
   [!panel.includes('fetch('), 'requirement coach must not make network requests'],
   [css.includes('.readiness-launcher'), 'coach launcher styling is required'],
   [css.includes('.readiness-drawer'), 'coach drawer styling is required'],
@@ -52,23 +76,29 @@ const checks = [
   [css.includes('.question-card'), 'guided-question styling is required'],
   [css.includes('@media (max-width: 760px)'), 'coach must support phone layouts'],
   [css.includes('prefers-reduced-motion'), 'coach must respect reduced-motion preferences'],
+  [hardeningCss.includes('z-index: 90'), 'coach modal must layer above other floating consoles'],
   [engine.includes("from './requirement-intelligence.js'"), 'planner must import requirement intelligence'],
   [engine.includes('requirementAnalysis,'), 'planner must retain the assessment in HarnessResult'],
   [engine.includes("type: 'RequirementAssessment'"), 'planner must retain a requirement assessment artifact'],
   [engine.includes("'requirement.assessed'"), 'planner trace must record requirement assessment'],
   [resultContract.includes("from './requirement-intelligence.js'"), 'result contract must validate assessment when present'],
-  [resultContract.includes("'requirementAnalysis' in value"), 'legacy results without an assessment must remain readable']
+  [resultContract.includes("'requirementAnalysis' in value"), 'legacy results without an assessment must remain readable'],
+  [liveVerification.includes('/requirement-intelligence.js'), 'live verification must fetch the intelligence engine'],
+  [liveVerification.includes('/requirement-intelligence-panel.js'), 'live verification must fetch the coach UI'],
+  [liveVerification.includes('Resource-scoped contradiction detection'), 'live verification must record scoped contradiction evidence']
 ];
 
 for (const [condition, message] of checks) {
   if (!condition) throw new Error(message);
 }
 
-const openings = [...css.matchAll(/\{/g)].length;
-const closings = [...css.matchAll(/\}/g)].length;
-if (openings !== closings) throw new Error('panel stylesheet braces are unbalanced');
-if (/url\s*\(\s*["']?https?:|data:image\//i.test(css)) {
-  throw new Error('panel stylesheet must not embed remote or data-image artwork');
+for (const [name, stylesheet] of [['panel', css], ['hardening', hardeningCss]]) {
+  const openings = [...stylesheet.matchAll(/\{/g)].length;
+  const closings = [...stylesheet.matchAll(/\}/g)].length;
+  if (openings !== closings) throw new Error(`${name} stylesheet braces are unbalanced`);
+  if (/url\s*\(\s*["']?https?:|data:image\//i.test(stylesheet)) {
+    throw new Error(`${name} stylesheet must not embed remote or data-image artwork`);
+  }
 }
 
-console.log('Validated deterministic requirement intelligence, retained result contract, coach UI, and responsive boundaries.');
+console.log('Validated hardened deterministic requirement intelligence, retained result contract, modal coach UI, and live deployment verification.');

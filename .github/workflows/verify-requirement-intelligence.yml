@@ -1,0 +1,151 @@
+name: Verify Requirement Intelligence Pages
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy HarnessLab to Pages
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: verify-requirement-intelligence-live
+  cancel-in-progress: true
+
+jobs:
+  verify-live:
+    name: Requirements / live
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify deployed requirement intelligence
+        shell: bash
+        env:
+          BASE_URL: https://yashumani.github.io/harnesslab
+        run: |
+          set -euo pipefail
+
+          ready=false
+          for attempt in {1..36}; do
+            if curl --fail --silent --show-error --location --max-time 20 \
+              "${BASE_URL}/?requirements=${GITHUB_RUN_ID}-${attempt}" \
+              -o /tmp/harnesslab-index.html; then
+              if grep -q 'src="./requirement-intelligence-panel.js"' /tmp/harnesslab-index.html; then
+                ready=true
+                break
+              fi
+            fi
+            sleep 5
+          done
+
+          if [[ "${ready}" != 'true' ]]; then
+            echo 'The public site did not expose the requirement-intelligence entrypoint.'
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/requirement-intelligence.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/requirement-intelligence.mjs
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/requirement-intelligence-panel.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/requirement-intelligence-panel.js
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/requirement-intelligence-panel.css?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/requirement-intelligence-panel.css
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/requirement-intelligence-hardening.css?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/requirement-intelligence-hardening.css
+
+          node --input-type=module <<'NODE'
+          import { pathToFileURL } from 'node:url';
+          const moduleUrl = `${pathToFileURL('/tmp/requirement-intelligence.mjs').href}?run=${Date.now()}`;
+          const {
+            analyzeRequirementIntelligence,
+            validateRequirementIntelligence
+          } = await import(moduleUrl);
+
+          const unrelated = analyzeRequirementIntelligence(
+            'Build an agent for analysts. The database must remain read-only. The agent must update a local status report.'
+          );
+          if (unrelated.contradictions.some((item) => item.id === 'read-only-vs-required-mutation')) {
+            throw new Error('Unrelated resource clauses were combined into a contradiction.');
+          }
+
+          const sameResource = analyzeRequirementIntelligence(
+            'The database must remain read-only. The agent is required to update the database before returning a report.'
+          );
+          if (!sameResource.contradictions.some((item) => item.id === 'read-only-vs-required-mutation')) {
+            throw new Error('Same-resource contradiction was not detected.');
+          }
+
+          const source = 'Build  an agent that summarizes  meeting notes into a report for analysts.';
+          const evidence = analyzeRequirementIntelligence(source);
+          for (const dimension of evidence.dimensions) {
+            for (const excerpt of dimension.evidence) {
+              if (!source.includes(excerpt)) throw new Error('Evidence excerpt was not preserved verbatim.');
+            }
+          }
+
+          const inconsistent = structuredClone(evidence);
+          inconsistent.counts = { covered: 10, partial: 10, missing: 10 };
+          if (validateRequirementIntelligence(inconsistent).valid) {
+            throw new Error('Inconsistent derived counts passed validation.');
+          }
+          NODE
+
+          grep -q 'setBackgroundInert(true)' /tmp/requirement-intelligence-panel.js
+          grep -q 'setBackgroundInert(false)' /tmp/requirement-intelligence-panel.js
+          grep -q "event.key === 'Escape'" /tmp/requirement-intelligence-panel.js
+          grep -q "event.key !== 'Tab'" /tmp/requirement-intelligence-panel.js
+          grep -q 'aria-modal="true"' /tmp/requirement-intelligence-panel.js
+          grep -q 'this.retainedAnalysis = null' /tmp/requirement-intelligence-panel.js
+          grep -q 'characterData: true' /tmp/requirement-intelligence-panel.js
+          grep -q 'textarea.value !== this.requirement' /tmp/requirement-intelligence-panel.js
+          grep -q 'z-index: 90' /tmp/requirement-intelligence-hardening.css
+          grep -q '@media (max-width: 760px)' /tmp/requirement-intelligence-panel.css
+          grep -q 'prefers-reduced-motion' /tmp/requirement-intelligence-panel.css
+
+          if grep -Eqi 'OPENROUTER_API_KEY|authorization[[:space:]]*:' /tmp/requirement-intelligence.mjs /tmp/requirement-intelligence-panel.js; then
+            echo 'Requirement intelligence must not contain provider credentials or authorization.'
+            exit 1
+          fi
+
+          {
+            echo '### Live requirement intelligence verification'
+            echo
+            echo '- Source-only evidence: verified'
+            echo '- Resource-scoped contradictions: verified'
+            echo '- Derived-count consistency: verified'
+            echo '- Modal focus and stale-state contracts: verified'
+            echo '- Provider credentials and network authority: absent'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Record verified deployment
+        if: ${{ github.event_name == 'workflow_run' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          VERIFY_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh issue comment 35 --repo "${GITHUB_REPOSITORY}" --body "$(cat <<EOF
+          <!-- harnesslab-requirement-intelligence-verification -->
+          ## Public requirement intelligence verified
+
+          - Deployed commit: \`${DEPLOYED_SHA}\`
+          - Verbatim source evidence: verified
+          - Resource-scoped contradiction detection: verified
+          - Count and brief consistency contract: verified
+          - Modal focus, inert background, and stale-state handling: verified
+          - Provider credentials and network execution: absent
+          - Deployment workflow: ${DEPLOY_RUN_URL}
+          - Verification workflow: ${VERIFY_RUN_URL}
+          EOF
+          )"

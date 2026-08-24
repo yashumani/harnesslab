@@ -4,6 +4,15 @@ import {
 } from './requirement-intelligence.js';
 
 const COMPOSER_SELECTOR = 'textarea[aria-label="Agent system requirement"]';
+const FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  'a[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'summary',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',');
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -35,6 +44,12 @@ function priorityLabel(priority) {
   return priority === 'high' ? 'Resolve first' : priority === 'medium' ? 'Next question' : 'Optional';
 }
 
+function isVisible(element) {
+  if (!(element instanceof HTMLElement)) return false;
+  const style = globalThis.getComputedStyle?.(element);
+  return style ? style.visibility !== 'hidden' && style.display !== 'none' : true;
+}
+
 class HarnessLabRequirementIntelligence extends HTMLElement {
   constructor() {
     super();
@@ -47,6 +62,7 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
     this.textarea = null;
     this.inputTimer = null;
     this.observer = null;
+    this.backgroundStates = new Map();
     this.message = 'Describe the use case to see evidence-backed requirement readiness.';
     this.messageTone = 'neutral';
     this.onDocumentInput = this.onDocumentInput.bind(this);
@@ -56,6 +72,7 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
 
   connectedCallback() {
     document.addEventListener('input', this.onDocumentInput);
+    document.addEventListener('change', this.onDocumentInput);
     globalThis.addEventListener('harnesslab:analysis-result', this.onAnalysisResult);
     globalThis.addEventListener('keydown', this.onKeyDown);
     this.observeComposer();
@@ -64,24 +81,33 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
 
   disconnectedCallback() {
     document.removeEventListener('input', this.onDocumentInput);
+    document.removeEventListener('change', this.onDocumentInput);
     globalThis.removeEventListener('harnesslab:analysis-result', this.onAnalysisResult);
     globalThis.removeEventListener('keydown', this.onKeyDown);
     this.observer?.disconnect();
     globalThis.clearTimeout(this.inputTimer);
+    this.setBackgroundInert(false);
   }
 
   observeComposer() {
     const attach = () => {
       const textarea = document.querySelector(COMPOSER_SELECTOR);
-      if (!textarea || textarea === this.textarea) return Boolean(textarea);
+      if (!textarea) return false;
+      const nodeChanged = textarea !== this.textarea;
+      const valueChanged = textarea.value !== this.requirement;
       this.textarea = textarea;
-      this.updateLiveAnalysis(textarea.value);
+      if (nodeChanged || valueChanged) this.updateLiveAnalysis(textarea.value);
       return true;
     };
     attach();
     this.observer?.disconnect();
     this.observer = new MutationObserver(() => attach());
-    this.observer.observe(document.documentElement, { childList: true, subtree: true });
+    this.observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true
+    });
   }
 
   onDocumentInput(event) {
@@ -95,7 +121,7 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
     const trimmed = this.requirement.trim();
     if (trimmed.length < 8) {
       this.liveAnalysis = null;
-      this.mode = this.retainedAnalysis ? this.mode : 'live';
+      if (!this.retainedAnalysis) this.mode = 'live';
       this.message = 'Add more detail to begin the local readiness assessment.';
       this.messageTone = 'neutral';
       this.render();
@@ -115,20 +141,100 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
   }
 
   onAnalysisResult(event) {
-    const candidate = event?.detail?.requirementAnalysis;
-    if (validateRequirementIntelligence(candidate).valid) {
+    if (!event?.detail) return;
+    const candidate = event.detail.requirementAnalysis;
+    const validation = validateRequirementIntelligence(candidate);
+    if (validation.valid) {
       this.retainedAnalysis = cloneJson(candidate);
       this.mode = 'retained';
       this.message = 'The generated HarnessResult retained this typed requirement assessment.';
       this.messageTone = 'success';
       this.render();
+      return;
+    }
+
+    this.retainedAnalysis = null;
+    this.mode = 'live';
+    const currentValue = this.textarea?.value ?? this.requirement;
+    if (typeof currentValue === 'string' && currentValue !== this.requirement) {
+      this.updateLiveAnalysis(currentValue);
+      return;
+    }
+    this.message = 'This valid legacy result contains no retained requirement assessment; the live draft remains authoritative.';
+    this.messageTone = 'warning';
+    this.render();
+  }
+
+  setBackgroundInert(inert) {
+    const excludedTags = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT']);
+    if (inert) {
+      for (const element of document.body.children) {
+        if (element === this || excludedTags.has(element.tagName) || this.backgroundStates.has(element)) continue;
+        this.backgroundStates.set(element, {
+          inert: element.hasAttribute('inert'),
+          ariaHidden: element.getAttribute('aria-hidden')
+        });
+        element.setAttribute('inert', '');
+        element.setAttribute('aria-hidden', 'true');
+      }
+      return;
+    }
+
+    for (const [element, state] of this.backgroundStates) {
+      if (!element.isConnected) continue;
+      if (state.inert) element.setAttribute('inert', '');
+      else element.removeAttribute('inert');
+      if (state.ariaHidden === null) element.removeAttribute('aria-hidden');
+      else element.setAttribute('aria-hidden', state.ariaHidden);
+    }
+    this.backgroundStates.clear();
+  }
+
+  openDrawer() {
+    this.open = true;
+    this.setBackgroundInert(true);
+    this.render();
+    globalThis.queueMicrotask(() => {
+      this.shadowRoot.querySelector('[data-action="close"]')?.focus();
+    });
+  }
+
+  closeDrawer({ restoreFocus = true } = {}) {
+    this.open = false;
+    this.setBackgroundInert(false);
+    this.render();
+    if (restoreFocus) {
+      globalThis.queueMicrotask(() => {
+        this.shadowRoot.querySelector('[data-action="toggle"]')?.focus();
+      });
     }
   }
 
   onKeyDown(event) {
-    if (event.key === 'Escape' && this.open) {
-      this.open = false;
-      this.render();
+    if (!this.open) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeDrawer();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const panel = this.shadowRoot.querySelector('.drawer-panel');
+    const focusable = [...panel.querySelectorAll(FOCUSABLE_SELECTOR)].filter(isVisible);
+    if (!focusable.length) {
+      event.preventDefault();
+      panel.focus();
+      return;
+    }
+    const active = this.shadowRoot.activeElement;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && (active === first || !panel.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
+      event.preventDefault();
+      first.focus();
     }
   }
 
@@ -138,10 +244,12 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
   }
 
   scrollToComposer() {
-    document.querySelector(COMPOSER_SELECTOR)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    document.querySelector(COMPOSER_SELECTOR)?.focus({ preventScroll: true });
-    this.open = false;
-    this.render();
+    const composer = document.querySelector(COMPOSER_SELECTOR);
+    this.closeDrawer({ restoreFocus: false });
+    globalThis.queueMicrotask(() => {
+      composer?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      composer?.focus({ preventScroll: true });
+    });
   }
 
   async copyQuestions() {
@@ -165,14 +273,8 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
     const action = (name, handler) => {
       this.shadowRoot.querySelector(`[data-action="${name}"]`)?.addEventListener('click', handler);
     };
-    action('toggle', () => {
-      this.open = !this.open;
-      this.render();
-    });
-    action('close', () => {
-      this.open = false;
-      this.render();
-    });
+    action('toggle', () => this.open ? this.closeDrawer() : this.openDrawer());
+    action('close', () => this.closeDrawer());
     action('live', () => {
       this.mode = 'live';
       this.render();
@@ -205,7 +307,7 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
 
   renderContradictions(contradictions) {
     if (!contradictions.length) {
-      return '<div class="empty-inline" data-tone="success"><strong>No explicit contradiction detected</strong><span>Narrow deterministic rules found no conflicting requirement pair.</span></div>';
+      return '<div class="empty-inline" data-tone="success"><strong>No explicit contradiction detected</strong><span>Narrow deterministic rules found no conflicting requirement pair in the same scope.</span></div>';
     }
     return contradictions.map((item) => `
       <article class="contradiction-card" data-severity="${escapeHtml(item.severity)}">
@@ -238,6 +340,7 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <link rel="stylesheet" href="./requirement-intelligence-panel.css">
+      <link rel="stylesheet" href="./requirement-intelligence-hardening.css">
       <button class="readiness-launcher" data-action="toggle" type="button" aria-expanded="${this.open}" aria-controls="requirement-intelligence-drawer">
         <span class="score-orb" data-status="${escapeHtml(status)}">${escapeHtml(score)}</span>
         <span><strong>Requirement readiness</strong><small>${escapeHtml(launcherDetail)}</small></span>
@@ -245,7 +348,7 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
 
       <section id="requirement-intelligence-drawer" class="readiness-drawer" data-open="${this.open}" aria-hidden="${!this.open}">
         <div class="drawer-backdrop" data-action="close"></div>
-        <div class="drawer-panel" role="dialog" aria-modal="false" aria-labelledby="requirement-intelligence-title">
+        <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="requirement-intelligence-title" tabindex="-1">
           <header class="drawer-header">
             <div><span class="eyebrow">Harness Intelligence · M1</span><h2 id="requirement-intelligence-title">Requirement readiness</h2><p>Source-only guidance before architecture becomes execution.</p></div>
             <button class="icon-button" data-action="close" type="button" aria-label="Close requirement readiness">×</button>

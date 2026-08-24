@@ -142,23 +142,26 @@ const CONTRADICTION_RULES = Object.freeze([
     statement: 'The requirement asks for full autonomy while also requiring human approval for every action.',
     question: 'Which actions are genuinely autonomous, and which exact actions require approval?',
     left: /\b(fully autonomous|full autonomy|without human intervention|no human involvement)\b/i,
-    right: /\b(human|manual)\s+approval\s+(before|for)\s+(every|any|all)\s+(action|step|operation)|approve\s+(every|all)\s+(action|step|operation)\b/i
+    right: /\b((human|manual)\s+approval\s+(is\s+)?(required\s+)?(before|for)\s+(every|any|all)\s+(action|step|operation)|(every|all)\s+(action|step|operation)\s+(requires?|must have)\s+(human|manual)\s+approval|approve\s+(every|all)\s+(action|step|operation))\b/i,
+    scope: 'window'
   },
   {
     id: 'read-only-vs-required-mutation',
     severity: 'high',
-    statement: 'The requirement declares the system read-only while also requiring a write, update, deletion, deployment, or send action.',
-    question: 'Should the system remain read-only, or which explicit mutation is approval-gated?',
+    statement: 'The requirement declares the same agent or protected resource read-only while also requiring a write, update, deletion, deployment, or send action.',
+    question: 'Should the protected scope remain read-only, or which explicit mutation is approval-gated?',
     left: /\b(must remain read[- ]only|read[- ]only only|never (write|modify|update|delete|deploy|send)|no (writes?|modifications?|updates?|deletions?|deployments?))\b/i,
-    right: /\b(must|required to|shall)\s+(write|modify|update|delete|deploy|send|publish|merge)\b/i
+    right: /\b(must|required to|shall)\s+(write|modify|update|delete|deploy|send|publish|merge)\b/i,
+    scope: 'resource'
   },
   {
     id: 'no-external-access-vs-external-integration',
     severity: 'high',
     statement: 'The requirement prohibits external or network access while requiring an external integration.',
     question: 'Is external access prohibited, or which named integration is allowlisted?',
-    left: /\b(no|without)\s+(external|network|internet|api)\s+(access|calls?|connections?)|must not access (the )?(internet|network|external systems?)\b/i,
-    right: /\b(openrouter|slack|email|calendar|salesforce|jira|linear|github api|external api|web search|remote service|cloud model)\b/i
+    left: /\b((no|without)\s+(external|network|internet|api)\s+(access|calls?|connections?)|must not access (the )?(internet|network|external systems?))\b/i,
+    right: /\b(openrouter|slack|email|calendar|salesforce|jira|linear|github api|external api|web search|remote service|cloud model)\b/i,
+    scope: 'window'
   },
   {
     id: 'no-credentials-vs-hosted-provider',
@@ -166,15 +169,17 @@ const CONTRADICTION_RULES = Object.freeze([
     statement: 'The requirement prohibits accounts or credentials while requiring a hosted provider that normally needs authentication.',
     question: 'Should the solution be fully local, or may a server-side account credential be configured?',
     left: /\b(no account|without (an )?account|no sign[- ]?up|without sign[- ]?up|no api key|without (an )?api key|no credentials?)\b/i,
-    right: /\b(openrouter|hosted api|cloud model|hosted model|external provider api)\b/i
+    right: /\b(openrouter|hosted api|cloud model|hosted model|external provider api)\b/i,
+    scope: 'window'
   },
   {
     id: 'no-data-access-vs-data-query',
     severity: 'high',
-    statement: 'The requirement denies data access while requiring the system to query or analyze that data.',
+    statement: 'The requirement denies access to a data resource while requiring the system to query or analyze the same resource.',
     question: 'Which data source is available, and should access be read-only rather than prohibited?',
     left: /\b(no access to (the )?(data|database|warehouse)|cannot access (the )?(data|database|warehouse)|must not access (the )?(data|database|warehouse))\b/i,
-    right: /\b(query|read|analy[sz]e|inspect)\s+(the )?(data|database|sql|warehouse|tables?|records?)\b/i
+    right: /\b(query|read|analy[sz]e|inspect)\s+(the )?(data|database|sql|warehouse|tables?|records?)\b/i,
+    scope: 'resource'
   },
   {
     id: 'no-persistence-vs-memory',
@@ -182,8 +187,23 @@ const CONTRADICTION_RULES = Object.freeze([
     statement: 'The requirement prohibits retention while also requiring memory, history, or persistence.',
     question: 'What state may be retained, for how long, and in which storage boundary?',
     left: /\b(do not store|don't store|never retain|no retention|no persistence|must not persist|stateless only)\b/i,
-    right: /\b(memory|remember|history|persist|persistence|retain previous|previous sessions?|long-term state)\b/i
+    right: /\b(memory|remember|history|persist|persistence|retain previous|previous sessions?|long-term state)\b/i,
+    scope: 'window'
   }
+]);
+
+const RESOURCE_GROUPS = Object.freeze({
+  agent: /\b(agent|assistant|system|workflow|copilot)\b/i,
+  data: /\b(data|dataset|database|sql|warehouse|table|tables|record|records)\b/i,
+  repository: /\b(repository|repo|codebase|code|file|files|filesystem)\b/i,
+  production: /\b(production|deployment|deployments|environment|environments|resource|resources)\b/i,
+  communication: /\b(email|message|messages|notification|notifications|slack|calendar)\b/i,
+  report: /\b(report|briefing|summary|status report|artifact|document)\b/i
+});
+
+const TOP_LEVEL_FIELDS = new Set([
+  'schemaVersion', 'analysisId', 'sourcePolicy', 'score', 'status', 'summary',
+  'counts', 'dimensions', 'brief', 'contradictions', 'questions'
 ]);
 
 function clampScore(value) {
@@ -207,18 +227,33 @@ function normalizeRequirement(value) {
   return requirement;
 }
 
+function normalizeForMatch(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function patternMatches(value, pattern) {
+  return pattern.test(normalizeForMatch(value));
+}
+
 function splitEvidenceSegments(requirement) {
   const segments = requirement.match(/[^.!?;\n]+[.!?;]?/g) || [requirement];
   return segments
-    .map((segment) => segment.trim().replace(/\s+/g, ' '))
+    .map((segment) => segment.trim())
     .filter(Boolean)
     .slice(0, 64);
+}
+
+function splitScopeClauses(segment) {
+  return segment
+    .split(/(?:,|\b(?:and|but|while|although|yet)\b)/i)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
 }
 
 function matchingEvidence(segments, patterns) {
   const matches = [];
   for (const segment of segments) {
-    if (patterns.some((pattern) => pattern.test(segment))) {
+    if (patterns.some((pattern) => patternMatches(segment, pattern))) {
       matches.push(segment.slice(0, 420));
       if (matches.length >= MAX_EVIDENCE_ITEMS) break;
     }
@@ -227,7 +262,8 @@ function matchingEvidence(segments, patterns) {
 }
 
 function countPatternMatches(text, patterns) {
-  return patterns.reduce((total, pattern) => total + (pattern.test(text) ? 1 : 0), 0);
+  const normalized = normalizeForMatch(text);
+  return patterns.reduce((total, pattern) => total + (pattern.test(normalized) ? 1 : 0), 0);
 }
 
 function dimensionAssessment(definition, requirement, segments) {
@@ -252,18 +288,66 @@ function dimensionAssessment(definition, requirement, segments) {
   };
 }
 
-function contradictionAssessment(requirement, segments) {
+function resourceScopes(value) {
+  return new Set(
+    Object.entries(RESOURCE_GROUPS)
+      .filter(([, pattern]) => patternMatches(value, pattern))
+      .map(([name]) => name)
+  );
+}
+
+function sharesResource(left, right) {
+  const leftScopes = resourceScopes(left);
+  const rightScopes = resourceScopes(right);
+  return [...leftScopes].some((scope) => rightScopes.has(scope));
+}
+
+function isGlobalReadOnlyClause(value) {
+  const normalized = normalizeForMatch(value);
+  return /\b(agent|assistant|system|workflow|copilot)\b.{0,100}\b(read[- ]only|never (write|modify|update|delete|deploy|send))\b/i.test(normalized)
+    || /\b(no writes?|no modifications?|no updates?|no deletions?|no deployments?)\b/i.test(normalized);
+}
+
+function scopedResourcePair(rule, leftSegment, rightSegment) {
+  const leftClauses = splitScopeClauses(leftSegment).filter((clause) => patternMatches(clause, rule.left));
+  const rightClauses = splitScopeClauses(rightSegment).filter((clause) => patternMatches(clause, rule.right));
+  const leftValues = leftClauses.length ? leftClauses : [leftSegment];
+  const rightValues = rightClauses.length ? rightClauses : [rightSegment];
+
+  return leftValues.some((left) => rightValues.some((right) => {
+    if (rule.id === 'read-only-vs-required-mutation' && isGlobalReadOnlyClause(left)) return true;
+    return sharesResource(left, right);
+  }));
+}
+
+function findContradictionPair(rule, segments) {
+  const leftMatches = segments
+    .map((text, index) => ({ text, index }))
+    .filter(({ text }) => patternMatches(text, rule.left));
+  const rightMatches = segments
+    .map((text, index) => ({ text, index }))
+    .filter(({ text }) => patternMatches(text, rule.right));
+
+  for (const left of leftMatches) {
+    for (const right of rightMatches) {
+      if (Math.abs(left.index - right.index) > 1) continue;
+      if (rule.scope === 'resource' && !scopedResourcePair(rule, left.text, right.text)) continue;
+      return { left: left.text, right: right.text };
+    }
+  }
+  return null;
+}
+
+function contradictionAssessment(segments) {
   return CONTRADICTION_RULES
-    .filter((rule) => rule.left.test(requirement) && rule.right.test(requirement))
+    .map((rule) => ({ rule, pair: findContradictionPair(rule, segments) }))
+    .filter(({ pair }) => Boolean(pair))
     .slice(0, MAX_CONTRADICTIONS)
-    .map((rule) => ({
+    .map(({ rule, pair }) => ({
       id: rule.id,
       severity: rule.severity,
       statement: rule.statement,
-      evidence: [...new Set([
-        ...matchingEvidence(segments, [rule.left]),
-        ...matchingEvidence(segments, [rule.right])
-      ])].slice(0, MAX_EVIDENCE_ITEMS),
+      evidence: [...new Set([pair.left, pair.right])].slice(0, MAX_EVIDENCE_ITEMS),
       question: rule.question
     }));
 }
@@ -313,12 +397,7 @@ function readinessSummary(status, score, missingCount, contradictionCount) {
   return `The requirement needs additional input (${score}/100) before the architecture should be treated as execution-ready${contradictionCount ? `; ${contradictionCount} contradiction${contradictionCount === 1 ? '' : 's'} require resolution` : ''}.`;
 }
 
-export function analyzeRequirementIntelligence(rawRequirement) {
-  const requirement = normalizeRequirement(rawRequirement);
-  const normalized = requirement.toLowerCase().replace(/\s+/g, ' ');
-  const segments = splitEvidenceSegments(requirement);
-  const dimensions = DIMENSIONS.map((definition) => dimensionAssessment(definition, requirement, segments));
-  const contradictions = contradictionAssessment(requirement, segments);
+function derivedScore(dimensions, contradictions) {
   const earnedWeight = dimensions.reduce((total, dimension) => {
     if (dimension.status === 'covered') return total + dimension.weight;
     if (dimension.status === 'partial') return total + dimension.weight * 0.5;
@@ -328,12 +407,27 @@ export function analyzeRequirementIntelligence(rawRequirement) {
     (total, contradiction) => total + (contradiction.severity === 'high' ? 14 : 7),
     0
   );
-  const score = clampScore(earnedWeight - contradictionPenalty);
+  return clampScore(earnedWeight - contradictionPenalty);
+}
+
+function countStatuses(dimensions) {
+  return {
+    covered: dimensions.filter((dimension) => dimension.status === 'covered').length,
+    partial: dimensions.filter((dimension) => dimension.status === 'partial').length,
+    missing: dimensions.filter((dimension) => dimension.status === 'missing').length
+  };
+}
+
+export function analyzeRequirementIntelligence(rawRequirement) {
+  const requirement = normalizeRequirement(rawRequirement);
+  const normalized = normalizeForMatch(requirement).toLowerCase();
+  const segments = splitEvidenceSegments(requirement);
+  const dimensions = DIMENSIONS.map((definition) => dimensionAssessment(definition, requirement, segments));
+  const contradictions = contradictionAssessment(segments);
+  const score = derivedScore(dimensions, contradictions);
   const status = readinessStatus(score, contradictions);
   const questions = prioritizedQuestions(dimensions, contradictions);
-  const missingCount = dimensions.filter((dimension) => dimension.status === 'missing').length;
-  const partialCount = dimensions.filter((dimension) => dimension.status === 'partial').length;
-  const coveredCount = dimensions.filter((dimension) => dimension.status === 'covered').length;
+  const counts = countStatuses(dimensions);
 
   const brief = Object.fromEntries(dimensions.map((dimension) => [dimension.id, {
     status: dimension.status,
@@ -347,8 +441,8 @@ export function analyzeRequirementIntelligence(rawRequirement) {
     sourcePolicy: 'Evidence is quoted only from the supplied requirement; unsupported details remain missing.',
     score,
     status,
-    summary: readinessSummary(status, score, missingCount, contradictions.length),
-    counts: { covered: coveredCount, partial: partialCount, missing: missingCount },
+    summary: readinessSummary(status, score, counts.missing, contradictions.length),
+    counts,
     dimensions,
     brief,
     contradictions,
@@ -369,68 +463,100 @@ function isText(value, { allowEmpty = false } = {}) {
     && (allowEmpty || value.trim().length > 0);
 }
 
+function sameStringArray(left, right) {
+  return Array.isArray(left)
+    && Array.isArray(right)
+    && left.length === right.length
+    && left.every((item, index) => item === right[index]);
+}
+
 export function validateRequirementIntelligence(value) {
   const errors = [];
   if (!isRecord(value)) return { valid: false, errors: ['requirementAnalysis must be an object.'] };
+
+  const unexpectedFields = Object.keys(value).filter((field) => !TOP_LEVEL_FIELDS.has(field));
+  if (unexpectedFields.length) errors.push(`requirementAnalysis contains unsupported field ${unexpectedFields[0]}.`);
   if (value.schemaVersion !== 1) errors.push('requirementAnalysis.schemaVersion must equal 1.');
-  if (!isText(value.analysisId)) errors.push('requirementAnalysis.analysisId must be text.');
+  if (!isText(value.analysisId) || !/^REQI-[A-F0-9]{8}$/.test(value.analysisId)) errors.push('requirementAnalysis.analysisId must use the REQI identifier format.');
   if (!isText(value.sourcePolicy)) errors.push('requirementAnalysis.sourcePolicy must be text.');
   if (!Number.isFinite(value.score) || value.score < 0 || value.score > 100) errors.push('requirementAnalysis.score must be between 0 and 100.');
   if (!['ready', 'draft', 'needs-input'].includes(value.status)) errors.push('requirementAnalysis.status is invalid.');
   if (!isText(value.summary)) errors.push('requirementAnalysis.summary must be text.');
 
+  const validDimensions = [];
+  if (!Array.isArray(value.dimensions) || value.dimensions.length !== MAX_DIMENSIONS) {
+    errors.push(`requirementAnalysis.dimensions must contain ${MAX_DIMENSIONS} entries.`);
+  } else {
+    value.dimensions.forEach((dimension, index) => {
+      const definition = DIMENSIONS[index];
+      if (!isRecord(dimension)) {
+        errors.push(`requirementAnalysis.dimensions[${index}] must be an object.`);
+        return;
+      }
+      if (dimension.id !== definition.id) errors.push(`requirementAnalysis.dimensions[${index}].id is invalid.`);
+      if (dimension.label !== definition.label) errors.push(`requirementAnalysis.dimensions[${index}].label is invalid.`);
+      if (dimension.weight !== definition.weight) errors.push(`requirementAnalysis.dimensions[${index}].weight is invalid.`);
+      if (!['covered', 'partial', 'missing'].includes(dimension.status)) errors.push(`requirementAnalysis.dimensions[${index}].status is invalid.`);
+      if (!isText(dimension.summary)) errors.push(`requirementAnalysis.dimensions[${index}].summary must be text.`);
+      if (!Array.isArray(dimension.evidence) || dimension.evidence.length > MAX_EVIDENCE_ITEMS || dimension.evidence.some((item) => !isText(item))) {
+        errors.push(`requirementAnalysis.dimensions[${index}].evidence is invalid.`);
+      }
+      if (dimension.status === 'missing' && Array.isArray(dimension.evidence) && dimension.evidence.length !== 0) {
+        errors.push(`requirementAnalysis.dimensions[${index}] cannot include evidence when missing.`);
+      }
+      validDimensions.push(dimension);
+    });
+  }
+
+  const expectedCounts = validDimensions.length === MAX_DIMENSIONS ? countStatuses(validDimensions) : null;
   if (!isRecord(value.counts)) {
     errors.push('requirementAnalysis.counts must be an object.');
   } else {
     for (const field of ['covered', 'partial', 'missing']) {
       if (!Number.isInteger(value.counts[field]) || value.counts[field] < 0 || value.counts[field] > MAX_DIMENSIONS) {
         errors.push(`requirementAnalysis.counts.${field} is invalid.`);
+      } else if (expectedCounts && value.counts[field] !== expectedCounts[field]) {
+        errors.push(`requirementAnalysis.counts.${field} disagrees with dimensions.`);
       }
     }
-  }
-
-  if (!Array.isArray(value.dimensions) || value.dimensions.length !== MAX_DIMENSIONS) {
-    errors.push(`requirementAnalysis.dimensions must contain ${MAX_DIMENSIONS} entries.`);
-  } else {
-    const ids = new Set();
-    value.dimensions.forEach((dimension, index) => {
-      if (!isRecord(dimension)) {
-        errors.push(`requirementAnalysis.dimensions[${index}] must be an object.`);
-        return;
-      }
-      if (!isText(dimension.id) || ids.has(dimension.id)) errors.push(`requirementAnalysis.dimensions[${index}].id is invalid.`);
-      ids.add(dimension.id);
-      if (!isText(dimension.label)) errors.push(`requirementAnalysis.dimensions[${index}].label must be text.`);
-      if (!Number.isFinite(dimension.weight) || dimension.weight <= 0 || dimension.weight > 100) errors.push(`requirementAnalysis.dimensions[${index}].weight is invalid.`);
-      if (!['covered', 'partial', 'missing'].includes(dimension.status)) errors.push(`requirementAnalysis.dimensions[${index}].status is invalid.`);
-      if (!isText(dimension.summary)) errors.push(`requirementAnalysis.dimensions[${index}].summary must be text.`);
-      if (!Array.isArray(dimension.evidence) || dimension.evidence.length > MAX_EVIDENCE_ITEMS || dimension.evidence.some((item) => !isText(item))) {
-        errors.push(`requirementAnalysis.dimensions[${index}].evidence is invalid.`);
-      }
-      if (dimension.status === 'missing' && dimension.evidence.length !== 0) {
-        errors.push(`requirementAnalysis.dimensions[${index}] cannot include evidence when missing.`);
-      }
-    });
+    if (['covered', 'partial', 'missing'].every((field) => Number.isInteger(value.counts[field]))
+      && value.counts.covered + value.counts.partial + value.counts.missing !== MAX_DIMENSIONS) {
+      errors.push(`requirementAnalysis.counts must total ${MAX_DIMENSIONS}.`);
+    }
   }
 
   if (!isRecord(value.brief)) {
     errors.push('requirementAnalysis.brief must be an object.');
   } else {
-    for (const definition of DIMENSIONS) {
+    const briefKeys = Object.keys(value.brief);
+    const expectedKeys = DIMENSIONS.map((definition) => definition.id);
+    if (briefKeys.length !== expectedKeys.length || briefKeys.some((key) => !expectedKeys.includes(key))) {
+      errors.push('requirementAnalysis.brief keys must match the dimension contract.');
+    }
+    for (const [index, definition] of DIMENSIONS.entries()) {
       const entry = value.brief[definition.id];
+      const dimension = validDimensions[index];
       if (!isRecord(entry) || !['covered', 'partial', 'missing'].includes(entry.status) || !isText(entry.summary) || !Array.isArray(entry.evidence)) {
         errors.push(`requirementAnalysis.brief.${definition.id} is invalid.`);
+        continue;
+      }
+      if (dimension && (entry.status !== dimension.status || entry.summary !== dimension.summary || !sameStringArray(entry.evidence, dimension.evidence))) {
+        errors.push(`requirementAnalysis.brief.${definition.id} disagrees with dimensions.`);
       }
     }
   }
 
+  const validContradictions = [];
   if (!Array.isArray(value.contradictions) || value.contradictions.length > MAX_CONTRADICTIONS) {
     errors.push('requirementAnalysis.contradictions is invalid.');
   } else {
+    const ids = new Set();
     value.contradictions.forEach((contradiction, index) => {
+      const rule = CONTRADICTION_RULES.find((candidate) => candidate.id === contradiction?.id);
       if (!isRecord(contradiction)
-        || !isText(contradiction.id)
-        || !['medium', 'high'].includes(contradiction.severity)
+        || !rule
+        || ids.has(contradiction.id)
+        || contradiction.severity !== rule.severity
         || !isText(contradiction.statement)
         || !Array.isArray(contradiction.evidence)
         || contradiction.evidence.length === 0
@@ -438,6 +564,9 @@ export function validateRequirementIntelligence(value) {
         || contradiction.evidence.some((item) => !isText(item))
         || !isText(contradiction.question)) {
         errors.push(`requirementAnalysis.contradictions[${index}] is invalid.`);
+      } else {
+        ids.add(contradiction.id);
+        validContradictions.push(contradiction);
       }
     });
   }
@@ -445,16 +574,27 @@ export function validateRequirementIntelligence(value) {
   if (!Array.isArray(value.questions) || value.questions.length > MAX_QUESTIONS) {
     errors.push('requirementAnalysis.questions is invalid.');
   } else {
+    const ids = new Set();
     value.questions.forEach((question, index) => {
       if (!isRecord(question)
         || !isText(question.id)
+        || ids.has(question.id)
         || !isText(question.dimension)
         || !['high', 'medium', 'low'].includes(question.priority)
         || !isText(question.question)
         || !isText(question.reason)) {
         errors.push(`requirementAnalysis.questions[${index}] is invalid.`);
+      } else {
+        ids.add(question.id);
       }
     });
+  }
+
+  if (validDimensions.length === MAX_DIMENSIONS && Array.isArray(value.contradictions)) {
+    const expectedScore = derivedScore(validDimensions, validContradictions);
+    const expectedStatus = readinessStatus(expectedScore, validContradictions);
+    if (value.score !== expectedScore) errors.push('requirementAnalysis.score disagrees with dimensions and contradictions.');
+    if (value.status !== expectedStatus) errors.push('requirementAnalysis.status disagrees with score and contradictions.');
   }
 
   return { valid: errors.length === 0, errors };
