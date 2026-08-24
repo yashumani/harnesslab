@@ -73,15 +73,23 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
   observeComposer() {
     const attach = () => {
       const textarea = document.querySelector(COMPOSER_SELECTOR);
-      if (!textarea || textarea === this.textarea) return Boolean(textarea);
+      if (!textarea) return false;
+      const changedNode = textarea !== this.textarea;
+      const changedValue = textarea.value !== this.requirement;
       this.textarea = textarea;
-      this.updateLiveAnalysis(textarea.value);
+      if (changedNode || changedValue) this.updateLiveAnalysis(textarea.value);
       return true;
     };
     attach();
     this.observer?.disconnect();
     this.observer = new MutationObserver(() => attach());
-    this.observer.observe(document.documentElement, { childList: true, subtree: true });
+    this.observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['value']
+    });
   }
 
   onDocumentInput(event) {
@@ -116,13 +124,20 @@ class HarnessLabRequirementIntelligence extends HTMLElement {
 
   onAnalysisResult(event) {
     const candidate = event?.detail?.requirementAnalysis;
-    if (validateRequirementIntelligence(candidate).valid) {
-      this.retainedAnalysis = cloneJson(candidate);
-      this.mode = 'retained';
-      this.message = 'The generated HarnessResult retained this typed requirement assessment.';
-      this.messageTone = 'success';
+    if (!validateRequirementIntelligence(candidate).valid) {
+      this.retainedAnalysis = null;
+      this.mode = 'live';
+      this.message = 'This result has no retained requirement assessment; showing the current live draft instead.';
+      this.messageTone = 'neutral';
       this.render();
+      return;
     }
+
+    this.retainedAnalysis = cloneJson(candidate);
+    this.mode = 'retained';
+    this.message = 'The generated HarnessResult retained this typed requirement assessment.';
+    this.messageTone = 'success';
+    this.render();
   }
 
   onKeyDown(event) {
