@@ -1,0 +1,172 @@
+name: Verify Architecture Decision Pages
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy HarnessLab to Pages
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: verify-architecture-decision-pages-live
+  cancel-in-progress: true
+
+jobs:
+  verify-live:
+    name: Decision / live
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Verify deployed topology assets
+        shell: bash
+        env:
+          BASE_URL: https://yashumani.github.io/harnesslab
+        run: |
+          set -euo pipefail
+          ready=false
+          for attempt in {1..36}; do
+            if curl --fail --silent --show-error --location --max-time 20 \
+              "${BASE_URL}/?topology-verify=${GITHUB_RUN_ID}-${attempt}" \
+              -o /tmp/harnesslab-decision-index.html; then
+              if grep -q 'src="./architecture-decision-panel.js"' /tmp/harnesslab-decision-index.html \
+                && grep -q 'agent-necessity and topology guidance' /tmp/harnesslab-decision-index.html; then
+                ready=true
+                break
+              fi
+            fi
+            sleep 5
+          done
+
+          if [[ "${ready}" != 'true' ]]; then
+            echo 'The public route did not serve the topology decision release.'
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/architecture-decision.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-architecture-decision.js
+          grep -q "'llm-feature'" /tmp/harnesslab-architecture-decision.js
+          grep -q "'workflow'" /tmp/harnesslab-architecture-decision.js
+          grep -q "'single-agent'" /tmp/harnesslab-architecture-decision.js
+          grep -q "'temporary-subagents'" /tmp/harnesslab-architecture-decision.js
+          grep -q "'external-agent-network'" /tmp/harnesslab-architecture-decision.js
+          grep -q 'risk never grants autonomy' /tmp/harnesslab-architecture-decision.js
+          grep -q "id: 'typed-functions'" /tmp/harnesslab-architecture-decision.js
+          grep -q "id: 'mcp'" /tmp/harnesslab-architecture-decision.js
+          grep -q "id: 'retrieval'" /tmp/harnesslab-architecture-decision.js
+          grep -q "id: 'a2a'" /tmp/harnesslab-architecture-decision.js
+          if grep -qi 'fetch(' /tmp/harnesslab-architecture-decision.js; then
+            echo 'The deployed decision engine must not perform network access.'
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/architecture-decision-panel.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-architecture-decision-panel.js
+          grep -q 'HarnessLabArchitectureDecision' /tmp/harnesslab-architecture-decision-panel.js
+          grep -q 'Functions, MCP, retrieval, and A2A are not interchangeable' /tmp/harnesslab-architecture-decision-panel.js
+          grep -q 'setBackgroundInert(true)' /tmp/harnesslab-architecture-decision-panel.js
+          grep -q 'textarea.value !== this.requirement' /tmp/harnesslab-architecture-decision-panel.js
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/architecture-decision-panel.css?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-architecture-decision-panel.css
+          grep -q '.factor-grid' /tmp/harnesslab-architecture-decision-panel.css
+          grep -q '.alternative-list' /tmp/harnesslab-architecture-decision-panel.css
+          grep -q '.protocol-grid' /tmp/harnesslab-architecture-decision-panel.css
+          grep -q '@media (max-width: 760px)' /tmp/harnesslab-architecture-decision-panel.css
+          grep -q 'prefers-reduced-motion' /tmp/harnesslab-architecture-decision-panel.css
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/engine.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/harnesslab-decision-engine.js
+          grep -q "from './architecture-decision.js'" /tmp/harnesslab-decision-engine.js
+          grep -q "type: 'TopologyDecision'" /tmp/harnesslab-decision-engine.js
+          grep -q "'topology.decided'" /tmp/harnesslab-decision-engine.js
+
+      - name: Execute the deployed advisor in Chromium
+        shell: bash
+        env:
+          CHROME_DEBUG_PORT: '9226'
+          BASE_URL: https://yashumani.github.io/harnesslab
+        run: |
+          set -euo pipefail
+          mkdir -p architecture-decision-live-evidence
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "${browser}" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.'
+            exit 1
+          fi
+
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-port=9226 \
+            --user-data-dir=/tmp/harnesslab-decision-live-chrome \
+            about:blank > /tmp/harnesslab-decision-live-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${browser_pid}" 2>/dev/null || true' EXIT
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:9226/json/version > /dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          node scripts/verify-architecture-decision-browser.mjs \
+            "${BASE_URL}/?topology-browser=${GITHUB_RUN_ID}" \
+            architecture-decision-live-evidence/result.json
+
+      - name: Upload live topology evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-live-architecture-decision
+          path: architecture-decision-live-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record the verified live deployment
+        if: ${{ github.event_name == 'workflow_run' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          VERIFY_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh issue comment 37 --repo "${GITHUB_REPOSITORY}" --body "$(cat <<EOF
+          <!-- harnesslab-topology-live-verification -->
+          ## Public topology advisor verified
+
+          The public HarnessLab release at https://yashumani.github.io/harnesslab/ passed post-deployment topology verification.
+
+          - Deployed commit: \`${DEPLOYED_SHA}\`
+          - Five-way agent-necessity decision contract: verified
+          - Evidence-backed factors and alternatives: verified
+          - Typed functions / MCP / retrieval / A2A responsibility guidance: verified
+          - Programmatic composer synchronization: verified
+          - Modal inertness and focus lifecycle: verified
+          - Browser model, gateway, and provider requests: zero
+          - Deployment workflow: ${DEPLOY_RUN_URL}
+          - Verification workflow: ${VERIFY_RUN_URL}
+          EOF
+          )"
