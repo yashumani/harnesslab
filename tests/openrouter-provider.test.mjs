@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { examples } from '../apps/web/engine.js';
+import { analyzeRequirement, examples } from '../apps/web/engine.js';
 import {
   ProviderResponseError,
   ProviderUnavailableError
@@ -130,6 +130,7 @@ test('uses the official chat endpoint, requests structured output, and records t
     }
   });
 
+  const deterministic = analyzeRequirement(examples[0].value);
   const response = await provider.analyze(examples[0].value);
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, `${OPENROUTER_API_BASE}/chat/completions`);
@@ -145,14 +146,18 @@ test('uses the official chat endpoint, requests structured output, and records t
   assert.equal(response.model, 'provider/selected-model:free');
   assert.match(response.result.mode, /OpenRouter free-model analysis/);
   assert.match(response.result.runId, /^OPENROUTER-/);
-  assert.equal(response.result.architecture.kind, validSupplement().architecture.kind);
+  assert.equal(response.result.architecture.kind, deterministic.agentDecision.selected.label);
+  assert.deepEqual(response.result.agentDecision, deterministic.agentDecision);
+  assert.match(response.result.architecture.reason, /OpenRouter advisory/);
   assert.ok(response.result.trace.some((entry) => entry.event === 'model.assisted'));
   assert.ok(response.result.trace.some((entry) => entry.detail.includes('provider/selected-model:free')));
+  assert.ok(response.result.trace.some((entry) => entry.detail.includes(validSupplement().architecture.kind)));
   assert.equal(
     response.result.permissions.find((permission) => permission.capability === 'Production deployment or deletion').policy,
     'Deny'
   );
   assert.ok(response.result.constraints.some((constraint) => constraint.includes('deterministic HarnessLab controls')));
+  assert.ok(response.result.constraints.some((constraint) => constraint.includes('AgentDecision remained authoritative')));
   assert.deepEqual(response.usage, {
     promptTokens: 410,
     completionTokens: 142,
@@ -176,9 +181,11 @@ test('supports text-part message content without accepting non-text parts', asyn
       }]
     })
   });
+  const deterministic = analyzeRequirement(examples[1].value);
   const response = await provider.analyze(examples[1].value);
   assert.equal(response.model, 'example/model:free');
-  assert.equal(response.result.architecture.kind, validSupplement().architecture.kind);
+  assert.equal(response.result.architecture.kind, deterministic.agentDecision.selected.label);
+  assert.deepEqual(response.result.agentDecision, deterministic.agentDecision);
 });
 
 test('returns a bounded free-capacity error for HTTP 429', async () => {
