@@ -155,7 +155,7 @@ button:focus-visible, summary:focus-visible { outline: 3px solid rgba(99, 91, 25
 .empty-state p { max-width: 400px; margin: 8px auto 0; color: var(--decision-muted); font-size: .7rem; line-height: 1.5; }
 
 @media (max-width: 760px) {
-  .decision-launcher { left: 12px; bottom: 12px; width: calc(100vw - 24px); }
+  .decision-launcher { left: 12px; bottom: 144px; width: calc(100vw - 24px); }
   .decision-launcher small { max-width: 220px; }
   .decision-panel { inset: 0; width: 100vw; padding: 18px 14px 92px; border: 0; border-radius: 0; }
   .factor-grid, .protocol-grid { grid-template-columns: 1fr; }
