@@ -9,7 +9,7 @@ function contradictionIds(text) {
 
 test('flags full autonomy combined with approval for every action', () => {
   const ids = contradictionIds(
-    'Build a fully autonomous agent without human intervention. Human approval is required before every action. It returns a report.'
+    'Build a fully autonomous agent without human intervention, with human approval before every action. It returns a report.'
   );
   assert.ok(ids.includes('autonomy-vs-every-action-approval'));
 
@@ -66,7 +66,7 @@ test('flags stateless requirements combined with cross-session memory', () => {
 
 test('places contradiction questions before missing-dimension questions', () => {
   const analysis = analyzeRequirementIntelligence(
-    'Build a fully autonomous agent without human intervention. Human approval is required before every action.'
+    'Build a fully autonomous agent without human intervention, with human approval before every action.'
   );
   assert.equal(analysis.status, 'needs-input');
   assert.equal(analysis.questions[0].dimension, 'contradiction');
