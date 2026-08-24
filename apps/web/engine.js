@@ -1,3 +1,5 @@
+import { analyzeRequirementIntelligence } from './requirement-intelligence.js';
+
 const examples = [
   {
     label: 'BI anomaly investigation',
@@ -83,6 +85,7 @@ function makeSubagents(flags, complexity, risk, id) {
 function makeStages(subagents) {
   const stages = [
     ['Request gateway', 'Validate input, establish a run identifier, and reject malformed requirements.', 'Deterministic'],
+    ['Requirement intelligence', 'Score requirement readiness, preserve source evidence, identify gaps, and flag conservative contradictions.', 'Deterministic + evidence contract'],
     ['Requirement compiler', 'Convert natural language into goals, constraints, risks, success criteria, and unresolved questions.', 'Reasoning + schema validation'],
     ['Architecture decision', 'Select workflow, single-agent, or adaptive-subagent topology and explain the choice.', 'Policy-guided reasoning'],
     ['Context compiler', 'Assemble only the context, tools, policies, and artifacts needed by each task.', 'Deterministic']
@@ -98,11 +101,16 @@ function makeStages(subagents) {
   return stages.map(([name, purpose, mode]) => ({ name, purpose, mode }));
 }
 
+function uniqueQuestions(...groups) {
+  return [...new Set(groups.flat().filter(Boolean))].slice(0, 8);
+}
+
 export function analyzeRequirement(rawRequirement) {
   if (typeof rawRequirement !== 'string') throw new TypeError('Requirement must be a string.');
   const requirement = rawRequirement.trim();
   if (requirement.length < 8) throw new Error('Describe the agent use case in at least 8 characters.');
 
+  const requirementAnalysis = analyzeRequirementIntelligence(requirement);
   const normalized = requirement.toLowerCase().replace(/\s+/g, ' ');
   const words = normalized.split(' ').filter(Boolean);
   const matches = Object.fromEntries(Object.entries(TERMS).map(([key, terms]) => [key, count(normalized, terms)]));
@@ -155,6 +163,7 @@ export function analyzeRequirement(rawRequirement) {
 
   const artifacts = [
     { id: `REQ-${id}`, type: 'RequirementSpec', status: 'Validated', retained: true },
+    { id: `REQI-${id}`, type: 'RequirementAssessment', status: requirementAnalysis.status === 'ready' ? 'Validated' : 'Draft', retained: true },
     { id: `HNS-${id}`, type: 'HarnessSpec', status: 'Validated', retained: true },
     ...subagents.map((agent) => ({ id: agent.returnArtifact, type: 'TemporaryAgentResult', status: 'Planned in demo', retained: true })),
     { id: `TRC-${id}`, type: 'TraceBundle', status: 'Complete', retained: true },
@@ -163,26 +172,30 @@ export function analyzeRequirement(rawRequirement) {
 
   const traceTuples = [
     ['+000ms', 'request.accepted', `Run DEMO-${id} created`],
-    ['+018ms', 'requirement.compiled', 'Goal, constraints, capabilities, and risk signals extracted'],
-    ['+041ms', 'architecture.selected', architecture.kind],
-    ['+064ms', 'context.compiled', 'Minimum context envelopes produced'],
-    ['+091ms', subagents.length ? 'subagents.planned' : 'subagents.skipped', subagents.length ? `${subagents.length} bounded temporary workers selected` : 'Additional workers did not justify their cost'],
-    ['+126ms', 'artifacts.validated', 'Required artifact schemas and references checked'],
-    ['+151ms', 'policy.checked', 'Permissions, approval gates, and denied actions applied'],
-    ['+176ms', 'response.ready', 'Demo harness plan rendered']
+    ['+012ms', 'requirement.assessed', `${requirementAnalysis.status} · ${requirementAnalysis.score}/100 · ${requirementAnalysis.contradictions.length} contradictions`],
+    ['+026ms', 'requirement.compiled', 'Goals, supported evidence, missing dimensions, constraints, and prioritized questions compiled'],
+    ['+049ms', 'architecture.selected', architecture.kind],
+    ['+071ms', 'context.compiled', 'Minimum context envelopes produced'],
+    ['+098ms', subagents.length ? 'subagents.planned' : 'subagents.skipped', subagents.length ? `${subagents.length} bounded temporary workers selected` : 'Additional workers did not justify their cost'],
+    ['+132ms', 'artifacts.validated', 'Required artifact schemas and references checked'],
+    ['+158ms', 'policy.checked', 'Permissions, approval gates, denied actions, and contradiction safeguards applied'],
+    ['+184ms', 'response.ready', 'Draft harness plan rendered']
   ];
   const trace = traceTuples.map(([offset, event, detail], index) => ({ sequence: index + 1, offset, event, detail, status: 'Complete' }));
 
-  const unresolvedQuestions = [];
-  if (!domainKeys.length) unresolvedQuestions.push('Which business domain and user group will own the result?');
-  if (matches.integrations) unresolvedQuestions.push('Which exact systems are available, and which operations must remain read-only?');
-  if (!/success|acceptance|accurate|correct|quality|metric|score/.test(normalized)) unresolvedQuestions.push('What measurable acceptance criteria define a successful run?');
-  if (words.length < 24) unresolvedQuestions.push('What failure consequences, latency expectation, and execution budget apply?');
-  if (flags.highRisk) unresolvedQuestions.push('Which actions require approval, and who is authorized to approve them?');
-  unresolvedQuestions.splice(4);
+  const legacyQuestions = [];
+  if (!domainKeys.length) legacyQuestions.push('Which business domain and user group will own the result?');
+  if (matches.integrations) legacyQuestions.push('Which exact systems are available, and which operations must remain read-only?');
+  if (!/success|acceptance|accurate|correct|quality|metric|score/.test(normalized)) legacyQuestions.push('What measurable acceptance criteria define a successful run?');
+  if (words.length < 24) legacyQuestions.push('What failure consequences, latency expectation, and execution budget apply?');
+  if (flags.highRisk) legacyQuestions.push('Which actions require approval, and who is authorized to approve them?');
+  const unresolvedQuestions = uniqueQuestions(
+    requirementAnalysis.questions.map((question) => question.question),
+    legacyQuestions
+  );
 
-  const completeness = clamp(94 - unresolvedQuestions.length * 7);
-  const safety = clamp(96 - Math.max(0, risk - 65) * 0.18);
+  const completeness = requirementAnalysis.score;
+  const safety = clamp(96 - Math.max(0, risk - 65) * 0.18 - requirementAnalysis.contradictions.length * 6);
   const efficiency = clamp(97 - subagents.length * 4 - Math.max(0, complexity - 80) * 0.15);
   const traceability = 98;
   const overall = clamp((completeness + safety + efficiency + traceability) / 4);
@@ -194,7 +207,13 @@ export function analyzeRequirement(rawRequirement) {
       { name: 'Execution efficiency', score: efficiency },
       { name: 'Traceability', score: traceability }
     ],
-    verdict: overall >= 90 ? 'Strong deploy-first harness plan' : overall >= 80 ? 'Usable plan with targeted questions' : 'Needs requirement clarification before live execution'
+    verdict: requirementAnalysis.status === 'needs-input'
+      ? 'Draft architecture only; resolve requirement questions before live execution'
+      : requirementAnalysis.status === 'draft'
+        ? 'Usable draft plan with targeted requirement questions'
+        : overall >= 90
+          ? 'Strong deploy-first harness plan'
+          : 'Requirement-ready plan with targeted implementation questions'
   };
 
   const capabilities = [];
@@ -206,15 +225,20 @@ export function analyzeRequirement(rawRequirement) {
   if (flags.externalAgents) capabilities.push('cross-agent interoperability');
   if (!capabilities.length) capabilities.push('structured interpretation and response generation');
 
+  const confidence = clamp(52 + requirementAnalysis.score * 0.45 - requirementAnalysis.contradictions.length * 8);
   const domain = domainKeys.length ? domainKeys.map((value) => value[0].toUpperCase() + value.slice(1)).join(' + ') : 'General operations';
+  const readinessNote = requirementAnalysis.status === 'ready'
+    ? 'The requirement is ready for a draft architecture.'
+    : 'Treat this architecture as a draft until the prioritized requirement questions are resolved.';
   return {
     mode: 'Deterministic demo — no live model or external tool execution',
     runId: `DEMO-${id}`,
     requirement: requirement.length > 170 ? `${requirement.slice(0, 167).trimEnd()}…` : requirement,
     domain,
-    scores: { complexity, risk, confidence: clamp(96 - unresolvedQuestions.length * 6) },
+    scores: { complexity, risk, confidence },
+    requirementAnalysis,
     architecture,
-    recommendation: `${architecture.kind}. Use ${subagents.length ? `${subagents.length} temporary specialists` : 'no temporary subagents'} for this first harness plan, preserve structured artifacts, and keep external writes approval-gated.`,
+    recommendation: `${architecture.kind}. Use ${subagents.length ? `${subagents.length} temporary specialists` : 'no temporary subagents'} for this first harness plan, preserve structured artifacts, and keep external writes approval-gated. ${readinessNote}`,
     capabilities,
     protocols,
     subagents,
@@ -229,8 +253,10 @@ export function analyzeRequirement(rawRequirement) {
       'Temporary agents cannot spawn child agents in this slice.',
       'Production mutation, deletion, and paid model usage remain disabled.',
       'All retained knowledge is represented as validated artifacts and trace events.',
-      'This deployed skeleton simulates planning; it does not execute live models or tools.'
-    ]
+      'Requirement intelligence quotes only supplied evidence and leaves unsupported details missing.',
+      ...requirementAnalysis.contradictions.map((contradiction) => `Resolve requirement contradiction before live execution: ${contradiction.statement}`),
+      'This deployed skeleton plans and critiques deterministically; it does not execute external tools.'
+    ].slice(0, 64)
   };
 }
 
