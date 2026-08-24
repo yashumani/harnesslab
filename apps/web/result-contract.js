@@ -1,3 +1,5 @@
+import { validateRequirementIntelligence } from './requirement-intelligence.js';
+
 const MAX_COLLECTION_SIZE = 64;
 const MAX_TEXT_LENGTH = 12000;
 
@@ -155,6 +157,13 @@ export function validateHarnessResult(value) {
       if ('fallbackUsed' in value.runtime && typeof value.runtime.fallbackUsed !== 'boolean') {
         errors.push('runtime.fallbackUsed must be boolean.');
       }
+    }
+  }
+
+  if ('requirementAnalysis' in value && value.requirementAnalysis !== null) {
+    const validation = validateRequirementIntelligence(value.requirementAnalysis);
+    if (!validation.valid) {
+      errors.push(...validation.errors.map((error) => `requirementAnalysis: ${error}`));
     }
   }
 
