@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { examples } from '../apps/web/engine.js';
+import { analyzeRequirement, examples } from '../apps/web/engine.js';
 import { ProviderResponseError, ProviderUnavailableError } from '../services/gateway/errors.mjs';
 import { createOllamaProvider } from '../services/gateway/providers/ollama.mjs';
 
@@ -47,7 +47,7 @@ test('health checks that the configured model is installed', async () => {
   assert.deepEqual(health, { configured: true, available: true, reason: null });
 });
 
-test('Ollama may refine architecture while deterministic controls remain authoritative', async () => {
+test('Ollama may advise architecture while deterministic topology and controls remain authoritative', async () => {
   const calls = [];
   const provider = createOllamaProvider({
     baseUrl: 'http://127.0.0.1:11434',
@@ -73,6 +73,7 @@ test('Ollama may refine architecture while deterministic controls remain authori
     }
   });
 
+  const deterministic = analyzeRequirement(examples[0].value);
   const response = await provider.analyze(examples[0].value);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, 'http://127.0.0.1:11434/api/chat');
@@ -84,13 +85,17 @@ test('Ollama may refine architecture while deterministic controls remain authori
 
   assert.match(response.result.mode, /Ollama-assisted/);
   assert.match(response.result.runId, /^OLLAMA-/);
-  assert.equal(response.result.architecture.kind, 'Adaptive orchestrator with evidence-review specialists');
+  assert.equal(response.result.architecture.kind, deterministic.agentDecision.selected.label);
+  assert.deepEqual(response.result.agentDecision, deterministic.agentDecision);
+  assert.match(response.result.architecture.reason, /Ollama advisory/);
   assert.ok(response.result.trace.some((entry) => entry.event === 'model.assisted'));
+  assert.ok(response.result.trace.some((entry) => entry.detail.includes('Adaptive orchestrator with evidence-review specialists')));
   assert.equal(
     response.result.permissions.find((permission) => permission.capability === 'Production deployment or deletion').policy,
     'Deny'
   );
   assert.ok(response.result.constraints.some((constraint) => constraint.includes('deterministic HarnessLab controls')));
+  assert.ok(response.result.constraints.some((constraint) => constraint.includes('AgentDecision remained authoritative')));
   assert.deepEqual(response.usage, {
     promptTokens: 420,
     completionTokens: 155,

@@ -1,0 +1,113 @@
+name: Agent Decision Integration
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-decision-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  decision:
+    name: Decision / deterministic
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Validate decision modules and contracts
+        run: |
+          node --check apps/web/agent-decision.js
+          node --check apps/web/agent-decision-panel.js
+          node scripts/validate-agent-decision.mjs
+          node --test tests/agent-decision.test.mjs tests/agent-decision-panel-contract.test.mjs
+
+      - name: Execute representative topology decisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { analyzeAgentDecision } from './apps/web/agent-decision.js';
+          import { analyzeRequirement } from './apps/web/engine.js';
+          import { analyzeRequirementIntelligence } from './apps/web/requirement-intelligence.js';
+          import { assertHarnessResult } from './apps/web/result-contract.js';
+
+          const cases = [
+            ['workflow', 'Summarize a short meeting note into three action items.'],
+            ['temporary-subagents', 'Build an agent that investigates KPI anomalies, validates data quality, queries a SQL warehouse, compares independent dimensions in parallel, and returns an evidence-backed report.'],
+            ['external-agent-network', 'Coordinate with an independent remote agent through A2A, exchange structured tasks, and validate every returned artifact.']
+          ];
+
+          for (const [expected, requirement] of cases) {
+            const readiness = analyzeRequirementIntelligence(requirement);
+            const decision = analyzeAgentDecision(requirement, readiness);
+            if (decision.selected.mode !== expected) {
+              throw new Error(`Expected ${expected}; received ${decision.selected.mode}`);
+            }
+            const result = analyzeRequirement(requirement);
+            assertHarnessResult(result);
+            if (result.agentDecision.selected.mode !== expected) {
+              throw new Error(`HarnessResult did not retain ${expected}.`);
+            }
+            if (result.architecture.kind !== result.agentDecision.selected.label) {
+              throw new Error('Architecture and AgentDecision diverged.');
+            }
+          }
+
+          const risky = 'Create a fixed workflow that sends an approved status email only after human approval and never deploys or deletes production resources.';
+          const riskyDecision = analyzeAgentDecision(risky, analyzeRequirementIntelligence(risky));
+          if (!riskyDecision.autonomy.approvalRequired) throw new Error('Risky actions did not require approval.');
+          if (['temporary-subagents', 'external-agent-network'].includes(riskyDecision.selected.mode)) {
+            throw new Error('Risk incorrectly increased agent topology.');
+          }
+          NODE
+
+      - name: Smoke test deployed static assets locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --directory apps/web > /tmp/harnesslab-decision-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /tmp/harnesslab-index.html; then break; fi
+            sleep 0.25
+          done
+          grep -q 'src="./agent-decision-panel.js"' /tmp/harnesslab-index.html
+          curl --fail --silent http://127.0.0.1:4173/agent-decision.js > /tmp/agent-decision.js
+          curl --fail --silent http://127.0.0.1:4173/agent-decision-panel.js > /tmp/agent-decision-panel.js
+          curl --fail --silent http://127.0.0.1:4173/agent-decision-panel.css > /tmp/agent-decision-panel.css
+          grep -q 'external-agent-network' /tmp/agent-decision.js
+          grep -q 'Risk reduces autonomy' /tmp/agent-decision.js
+          grep -q 'Nine topology factors' /tmp/agent-decision-panel.js
+          grep -q 'Functions, MCP, retrieval, and A2A' /tmp/agent-decision-panel.js
+          grep -q 'bottom: 144px' /tmp/agent-decision-panel.css
+          if grep -Eqi 'OPENROUTER_API_KEY|authorization[[:space:]]*:' /tmp/agent-decision.js /tmp/agent-decision-panel.js; then
+            echo 'Agent decision assets must not include provider credentials.'
+            exit 1
+          fi
+
+      - name: Summarize decision boundary
+        run: |
+          {
+            echo '### Agent necessity integration'
+            echo
+            echo '- Five topology modes: validated'
+            echo '- Source-backed factors and alternatives: validated'
+            echo '- Typed functions / MCP / retrieval / A2A responsibilities: validated'
+            echo '- Risk increases containment, not agency: validated'
+            echo '- Models, provider credentials, and network calls: absent'
+          } >> "$GITHUB_STEP_SUMMARY"

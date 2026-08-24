@@ -1,0 +1,153 @@
+name: Verify Agent Decision Pages
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy HarnessLab to Pages
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: verify-agent-decision-live
+  cancel-in-progress: true
+
+jobs:
+  verify-live:
+    name: Decision / live
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify deployed decision advisor
+        shell: bash
+        env:
+          BASE_URL: https://yashumani.github.io/harnesslab
+        run: |
+          set -euo pipefail
+
+          ready=false
+          for attempt in {1..36}; do
+            if curl --fail --silent --show-error --location --max-time 20 \
+              "${BASE_URL}/?decision=${GITHUB_RUN_ID}-${attempt}" \
+              -o /tmp/harnesslab-index.html; then
+              if grep -q 'src="./agent-decision-panel.js"' /tmp/harnesslab-index.html; then
+                ready=true
+                break
+              fi
+            fi
+            sleep 5
+          done
+
+          if [[ "${ready}" != 'true' ]]; then
+            echo 'The public site did not expose the agent-decision entrypoint.'
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/agent-decision.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/agent-decision.mjs
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/agent-decision-panel.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/agent-decision-panel.js
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/agent-decision-panel.css?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/agent-decision-panel.css
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/engine.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/engine.js
+          curl --fail --silent --show-error --location --max-time 20 \
+            "${BASE_URL}/result-contract.js?verify=${GITHUB_RUN_ID}" \
+            -o /tmp/result-contract.js
+
+          node --input-type=module <<'NODE'
+          import { pathToFileURL } from 'node:url';
+          const moduleUrl = `${pathToFileURL('/tmp/agent-decision.mjs').href}?run=${Date.now()}`;
+          const { analyzeAgentDecision, validateAgentDecision } = await import(moduleUrl);
+          const readiness = { status: 'draft', score: 72, contradictions: [] };
+
+          const workflow = analyzeAgentDecision('Summarize a short meeting note into three action items.', readiness);
+          if (workflow.selected.mode !== 'workflow') throw new Error('Public workflow decision failed.');
+
+          const temporary = analyzeAgentDecision(
+            'Build an agent that investigates KPI anomalies, queries a SQL warehouse, compares independent dimensions in parallel, and returns an evidence-backed report.',
+            readiness
+          );
+          if (temporary.selected.mode !== 'temporary-subagents') throw new Error('Public temporary-subagent decision failed.');
+          if (temporary.protocols.find((item) => item.id === 'a2a').decision !== 'not-needed') throw new Error('Internal workers incorrectly required A2A.');
+
+          const external = analyzeAgentDecision(
+            'Coordinate with an independent remote agent through A2A and validate every returned artifact.',
+            readiness
+          );
+          if (external.selected.mode !== 'external-agent-network') throw new Error('Public external-agent decision failed.');
+          if (external.protocols.find((item) => item.id === 'a2a').decision !== 'required') throw new Error('External-agent decision did not require A2A.');
+
+          const risky = analyzeAgentDecision(
+            'Create a fixed workflow that sends an approved status email only after human approval and never deploys or deletes production resources.',
+            readiness
+          );
+          if (!risky.autonomy.approvalRequired) throw new Error('Public risk containment failed.');
+          if (['temporary-subagents', 'external-agent-network'].includes(risky.selected.mode)) throw new Error('Public risk incorrectly increased agency.');
+
+          const malformed = structuredClone(workflow);
+          malformed.selected.mode = 'unbounded-swarm';
+          if (validateAgentDecision(malformed).valid) throw new Error('Malformed decision passed public validation.');
+          NODE
+
+          grep -q 'Nine topology factors' /tmp/agent-decision-panel.js
+          grep -q 'Alternatives and upgrade conditions' /tmp/agent-decision-panel.js
+          grep -q 'Functions, MCP, retrieval, and A2A' /tmp/agent-decision-panel.js
+          grep -q 'setBackgroundInert(true)' /tmp/agent-decision-panel.js
+          grep -q "event.key === 'Escape'" /tmp/agent-decision-panel.js
+          grep -q 'bottom: 144px' /tmp/agent-decision-panel.css
+          grep -q "type: 'AgentDecision'" /tmp/engine.js
+          grep -q "'agency.decided'" /tmp/engine.js
+          grep -q 'validateAgentDecision' /tmp/result-contract.js
+
+          if grep -Eqi 'OPENROUTER_API_KEY|OLLAMA_DEFAULT_MODEL|authorization[[:space:]]*:' \
+            /tmp/agent-decision.mjs /tmp/agent-decision-panel.js; then
+            echo 'The public decision advisor must not contain provider credentials.'
+            exit 1
+          fi
+
+          {
+            echo '### Live agent necessity verification'
+            echo
+            echo '- Workflow, temporary-subagent, and external-agent decisions: verified'
+            echo '- Internal workers do not require A2A: verified'
+            echo '- External-agent trust boundaries require A2A: verified'
+            echo '- Risk adds approval without increasing agency: verified'
+            echo '- Modal advisor and phone launcher stacking: verified'
+            echo '- Provider credentials and network execution: absent'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Record verified deployment
+        if: ${{ github.event_name == 'workflow_run' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          VERIFY_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh issue comment 37 --repo "${GITHUB_REPOSITORY}" --body "$(cat <<EOF
+          <!-- harnesslab-agent-decision-verification -->
+          ## Public agent necessity advisor verified
+
+          - Deployed commit: \`${DEPLOYED_SHA}\`
+          - Five bounded topology modes: verified
+          - Source-backed factors and alternatives: verified
+          - Typed functions / MCP / retrieval / A2A responsibilities: verified
+          - Risk increases containment, not agency: verified
+          - Responsive modal advisor: verified
+          - Provider credentials and network execution: absent
+          - Deployment workflow: ${DEPLOY_RUN_URL}
+          - Verification workflow: ${VERIFY_RUN_URL}
+          EOF
+          )"

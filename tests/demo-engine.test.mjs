@@ -17,39 +17,46 @@ test('returns a deterministic result for the same requirement', () => {
   assert.match(first.runId, /^DEMO-[A-F0-9]{8}$/);
   assert.equal(first.mode, 'Deterministic demo — no live model or external tool execution');
   assert.match(first.requirementAnalysis.analysisId, /^REQI-[A-F0-9]{8}$/);
+  assert.match(first.agentDecision.decisionId, /^AGD-[A-F0-9]{8}$/);
+  assert.equal(first.architecture.kind, first.agentDecision.selected.label);
 });
 
-test('keeps a narrow request simple and marks missing requirement dimensions', () => {
+test('keeps a narrow fixed request as a workflow and marks missing requirement dimensions', () => {
   const result = analyzeRequirement('Summarize a short meeting note into three action items.');
 
   assert.ok(result.scores.complexity < 58);
   assert.equal(result.subagents.length, 0);
-  assert.match(result.architecture.kind, /LLM feature|Deterministic workflow/);
+  assert.equal(result.agentDecision.selected.mode, 'workflow');
+  assert.match(result.architecture.kind, /Deterministic workflow/);
   assert.equal(result.permissions.find((item) => item.capability === 'Production deployment or deletion').policy, 'Deny');
   assert.ok(result.requirementAnalysis.counts.missing > 0);
   assert.ok(result.unresolvedQuestions.length > 0);
 });
 
-test('plans bounded temporary agents for a complex data investigation', () => {
+test('plans bounded temporary agents for explicit independent data workstreams', () => {
   const result = analyzeRequirement(examples[0].value);
 
   assert.ok(result.scores.complexity >= 74);
+  assert.equal(result.agentDecision.selected.mode, 'temporary-subagents');
   assert.match(result.architecture.kind, /temporary subagents/i);
-  assert.ok(result.subagents.length >= 3);
+  assert.ok(result.subagents.length >= 2);
   assert.ok(result.subagents.some((agent) => agent.role === 'Data Quality Analyst'));
   assert.ok(result.subagents.every((agent) => agent.childSpawning === false));
   assert.ok(result.subagents.every((agent) => agent.timeoutSeconds > 0));
-  assert.ok(result.protocols.some((protocol) => protocol.name.includes('MCP')));
+  assert.equal(result.protocols.find((protocol) => protocol.name === 'A2A interoperability').decision, 'Not yet');
   assert.ok(result.artifacts.some((artifact) => artifact.type === 'HarnessSpec'));
   assert.ok(result.artifacts.some((artifact) => artifact.type === 'RequirementAssessment'));
+  assert.ok(result.artifacts.some((artifact) => artifact.type === 'AgentDecision'));
   assert.ok(result.trace.some((entry) => entry.event === 'requirement.assessed'));
+  assert.ok(result.trace.some((entry) => entry.event === 'agency.decided'));
   assert.ok(result.trace.some((entry) => entry.event === 'subagents.planned'));
 });
 
-test('requires approval and denies production mutation for risky software delivery', () => {
+test('risk adds approval and denial boundaries without forcing extra agents', () => {
   const result = analyzeRequirement('Design an agent that modifies code, sends a pull request, and deploys to production only after a human approves the change. It must never delete production resources.');
 
   assert.ok(result.scores.risk >= 55);
+  assert.equal(result.agentDecision.autonomy.approvalRequired, true);
   assert.equal(
     result.permissions.find((item) => item.capability === 'Write or modify external systems').policy,
     'Human approval'
@@ -58,7 +65,10 @@ test('requires approval and denies production mutation for risky software delive
     result.permissions.find((item) => item.capability === 'Production deployment or deletion').policy,
     'Deny'
   );
-  assert.ok(result.subagents.some((agent) => agent.role === 'Safety and Policy Critic'));
+  if (!['temporary-subagents', 'external-agent-network'].includes(result.agentDecision.selected.mode)) {
+    assert.equal(result.subagents.length, 0);
+  }
+  assert.ok(result.constraints.some((constraint) => constraint.includes('cannot justify a more agentic topology')));
 });
 
 test('does not recommend A2A for internal temporary agents alone', () => {
@@ -68,14 +78,16 @@ test('does not recommend A2A for internal temporary agents alone', () => {
 
   const external = analyzeRequirement('Coordinate with an independent remote agent through A2A, exchange structured tasks, and validate returned artifacts before accepting them.');
   const externalA2A = external.protocols.find((protocol) => protocol.name === 'A2A interoperability');
+  assert.equal(external.agentDecision.selected.mode, 'external-agent-network');
   assert.equal(externalA2A.decision, 'Recommended');
 });
 
-test('evaluation and trace contracts remain complete', () => {
+test('evaluation and trace contracts include topology fit', () => {
   const result = analyzeRequirement(examples[2].value);
 
-  assert.equal(result.evaluation.dimensions.length, 4);
+  assert.equal(result.evaluation.dimensions.length, 5);
   assert.equal(result.evaluation.dimensions[0].score, result.requirementAnalysis.score);
+  assert.equal(result.evaluation.dimensions[1].score, result.agentDecision.selected.confidence);
   assert.ok(result.evaluation.overall >= 0 && result.evaluation.overall <= 100);
   assert.equal(result.trace.at(-1).event, 'response.ready');
   assert.ok(result.constraints.some((constraint) => constraint.includes('does not execute external tools')));
