@@ -1,3 +1,4 @@
+import { validateArchitectureDecision } from './architecture-decision.js';
 import { validateRequirementIntelligence } from './requirement-intelligence.js';
 
 const MAX_COLLECTION_SIZE = 64;
@@ -164,6 +165,16 @@ export function validateHarnessResult(value) {
     const validation = validateRequirementIntelligence(value.requirementAnalysis);
     if (!validation.valid) {
       errors.push(...validation.errors.map((error) => `requirementAnalysis: ${error}`));
+    }
+  }
+
+  if ('architectureDecision' in value && value.architectureDecision !== null) {
+    const validation = validateArchitectureDecision(value.architectureDecision);
+    if (!validation.valid) {
+      errors.push(...validation.errors.map((error) => `architectureDecision: ${error}`));
+    }
+    if (validation.valid && value.architecture?.kind !== value.architectureDecision.selectedTopology.architectureKind) {
+      errors.push('architecture.kind must match architectureDecision.selectedTopology.architectureKind.');
     }
   }
 

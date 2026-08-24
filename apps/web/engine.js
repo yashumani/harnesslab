@@ -1,3 +1,8 @@
+import {
+  analyzeArchitectureDecision,
+  architectureFromDecision,
+  protocolsFromDecision
+} from './architecture-decision.js';
 import { analyzeRequirementIntelligence } from './requirement-intelligence.js';
 
 const examples = [
@@ -39,8 +44,8 @@ function hashText(value) {
   return (hash >>> 0).toString(16).padStart(8, '0').toUpperCase();
 }
 
-function makeSubagents(flags, complexity, risk, id) {
-  if (complexity < 58 && risk < 55) return [];
+function makeSubagents(flags, complexity, risk, id, topologyId) {
+  if (topologyId !== 'temporary-subagents') return [];
   const agents = [];
 
   if (risk >= 55) {
@@ -82,16 +87,23 @@ function makeSubagents(flags, complexity, risk, id) {
   }));
 }
 
-function makeStages(subagents) {
+function makeStages(subagents, architectureDecision) {
+  const topologyId = architectureDecision.selectedTopology.id;
   const stages = [
     ['Request gateway', 'Validate input, establish a run identifier, and reject malformed requirements.', 'Deterministic'],
     ['Requirement intelligence', 'Score requirement readiness, preserve source evidence, identify gaps, and flag conservative contradictions.', 'Deterministic + evidence contract'],
+    ['Topology decision', 'Choose the smallest justified architecture and explain alternatives, protocols, and autonomy limits.', 'Deterministic + typed decision contract'],
     ['Requirement compiler', 'Convert natural language into goals, constraints, risks, success criteria, and unresolved questions.', 'Reasoning + schema validation'],
-    ['Architecture decision', 'Select workflow, single-agent, or adaptive-subagent topology and explain the choice.', 'Policy-guided reasoning'],
     ['Context compiler', 'Assemble only the context, tools, policies, and artifacts needed by each task.', 'Deterministic']
   ];
+  if (topologyId === 'single-agent') {
+    stages.push(['Bounded orchestrator loop', 'Choose typed tools and revise a plan within fixed turn, time, and action limits.', 'One bounded coordinator']);
+  }
   if (subagents.length) {
-    stages.push(['Temporary subagent execution', `Run ${subagents.length} bounded specialist tasks with isolated context and structured returns.`, 'Parallel when independent']);
+    stages.push(['Temporary subagent execution', `Run ${subagents.length} bounded specialist tasks with isolated context and structured returns.`, 'Parallel only when independent']);
+  }
+  if (topologyId === 'external-agent-network') {
+    stages.push(['External agent exchange', 'Exchange authenticated tasks and validated artifacts across explicit A2A trust boundaries.', 'Planned protocol boundary']);
   }
   stages.push(
     ['Artifact judge', 'Validate schemas, compare claims, resolve conflicts, and reject unsupported conclusions.', 'Deterministic + evaluator'],
@@ -111,6 +123,7 @@ export function analyzeRequirement(rawRequirement) {
   if (requirement.length < 8) throw new Error('Describe the agent use case in at least 8 characters.');
 
   const requirementAnalysis = analyzeRequirementIntelligence(requirement);
+  const architectureDecision = analyzeArchitectureDecision(requirement, requirementAnalysis);
   const normalized = requirement.toLowerCase().replace(/\s+/g, ' ');
   const words = normalized.split(' ').filter(Boolean);
   const matches = Object.fromEntries(Object.entries(TERMS).map(([key, terms]) => [key, count(normalized, terms)]));
@@ -119,43 +132,18 @@ export function analyzeRequirement(rawRequirement) {
   const domainKeys = ['data', 'code', 'research', 'communication'].filter((key) => flags[key]);
   const complexity = clamp(18 + Math.min(words.length, 80) * 0.9 + domainKeys.length * 7 + Math.min(matches.integrations, 5) * 5 + matches.parallel * 6 + (flags.externalAgents ? 10 : 0));
   const risk = clamp(12 + matches.highRisk * 13 + (flags.communication ? 8 : 0) + (flags.code && normalized.includes('deploy') ? 12 : 0) + (normalized.includes('production') ? 18 : 0));
-
-  let architecture;
-  if (words.length < 14 && matches.integrations === 0 && complexity < 38) {
-    architecture = { kind: 'LLM feature with deterministic wrapper', reason: 'The request is narrow and does not justify an autonomous control loop.' };
-  } else if (complexity < 52 && !flags.parallel) {
-    architecture = { kind: 'Deterministic workflow with one reasoning step', reason: 'A fixed sequence is sufficient; use a model only where interpretation is needed.' };
-  } else if (complexity < 74 && !flags.externalAgents) {
-    architecture = { kind: 'Single orchestrator with bounded tools', reason: 'The task needs tool selection and iterative reasoning, but one coordinator remains simpler and safer.' };
-  } else {
-    architecture = { kind: 'Adaptive orchestrator with temporary subagents', reason: 'Independent workstreams benefit from bounded parallel specialists and independent validation.' };
-  }
-
-  const subagents = makeSubagents(flags, complexity, risk, id);
-  const protocols = [
-    matches.integrations > 0
-      ? {
-          name: matches.integrations >= 2 || flags.data || flags.code ? 'MCP-ready tool layer' : 'Native function tools',
-          decision: 'Recommended',
-          rationale: matches.integrations >= 2 ? 'Expose multiple capabilities through one permission-aware interface.' : 'Begin with direct typed functions and adopt MCP when standardization adds value.'
-        }
-      : { name: 'Typed internal functions', decision: 'Start here', rationale: 'No external capability is explicitly required.' },
-    {
-      name: 'Retrieval / context service',
-      decision: flags.retrieval ? 'Recommended' : 'Optional',
-      rationale: flags.retrieval ? 'Knowledge should be selected, sourced, and freshness-checked.' : 'Add only when project evidence or domain knowledge is required.'
-    },
-    {
-      name: 'A2A interoperability',
-      decision: flags.externalAgents ? 'Recommended' : 'Not yet',
-      rationale: flags.externalAgents ? 'The request crosses an independent-agent trust boundary.' : 'Internal temporary workers do not need A2A.'
-    }
-  ];
+  const architecture = architectureFromDecision(architectureDecision);
+  const topologyId = architectureDecision.selectedTopology.id;
+  const subagents = makeSubagents(flags, complexity, risk, id, topologyId);
+  const protocols = protocolsFromDecision(architectureDecision);
 
   const permissions = [
     ['Read submitted requirement', 'Allow', 'Always available to the run'],
     ['Read approved context sources', flags.integrations || flags.retrieval ? 'Allowlist' : 'Not requested', flags.integrations || flags.retrieval ? 'Source-by-source grant with trace entry' : 'No external context is opened'],
     ['Spawn temporary subagents', subagents.length ? `Allow up to ${subagents.length}` : 'Disabled', 'Depth 1; no child spawning; per-worker timeout'],
+    ...(topologyId === 'external-agent-network'
+      ? [['Exchange tasks with external agents', 'Allowlist', 'Named peer identity, explicit capability grant, expiry, and artifact validation']]
+      : []),
     ['Write or modify external systems', flags.highRisk || flags.communication || flags.code ? 'Human approval' : 'Denied by default', 'Separate action token issued only after approval'],
     ['Production deployment or deletion', 'Deny', 'Tool is not exposed in this skeleton harness'],
     ['Paid model usage', 'Deny', 'Local or explicitly free route only until human authorization']
@@ -164,6 +152,7 @@ export function analyzeRequirement(rawRequirement) {
   const artifacts = [
     { id: `REQ-${id}`, type: 'RequirementSpec', status: 'Validated', retained: true },
     { id: `REQI-${id}`, type: 'RequirementAssessment', status: requirementAnalysis.status === 'ready' ? 'Validated' : 'Draft', retained: true },
+    { id: architectureDecision.decisionId, type: 'TopologyDecision', status: requirementAnalysis.status === 'ready' ? 'Validated' : 'Draft', retained: true },
     { id: `HNS-${id}`, type: 'HarnessSpec', status: 'Validated', retained: true },
     ...subagents.map((agent) => ({ id: agent.returnArtifact, type: 'TemporaryAgentResult', status: 'Planned in demo', retained: true })),
     { id: `TRC-${id}`, type: 'TraceBundle', status: 'Complete', retained: true },
@@ -173,13 +162,14 @@ export function analyzeRequirement(rawRequirement) {
   const traceTuples = [
     ['+000ms', 'request.accepted', `Run DEMO-${id} created`],
     ['+012ms', 'requirement.assessed', `${requirementAnalysis.status} · ${requirementAnalysis.score}/100 · ${requirementAnalysis.contradictions.length} contradictions`],
-    ['+026ms', 'requirement.compiled', 'Goals, supported evidence, missing dimensions, constraints, and prioritized questions compiled'],
-    ['+049ms', 'architecture.selected', architecture.kind],
-    ['+071ms', 'context.compiled', 'Minimum context envelopes produced'],
-    ['+098ms', subagents.length ? 'subagents.planned' : 'subagents.skipped', subagents.length ? `${subagents.length} bounded temporary workers selected` : 'Additional workers did not justify their cost'],
-    ['+132ms', 'artifacts.validated', 'Required artifact schemas and references checked'],
-    ['+158ms', 'policy.checked', 'Permissions, approval gates, denied actions, and contradiction safeguards applied'],
-    ['+184ms', 'response.ready', 'Draft harness plan rendered']
+    ['+024ms', 'topology.decided', `${topologyId} · ${architectureDecision.confidence}/100 · smallest justified architecture`],
+    ['+038ms', 'requirement.compiled', 'Goals, supported evidence, missing dimensions, constraints, and prioritized questions compiled'],
+    ['+061ms', 'architecture.selected', architecture.kind],
+    ['+083ms', 'context.compiled', 'Minimum context envelopes produced'],
+    ['+108ms', subagents.length ? 'subagents.planned' : 'subagents.skipped', subagents.length ? `${subagents.length} bounded temporary workers selected` : 'Additional workers did not justify their cost'],
+    ['+139ms', 'artifacts.validated', 'Requirement, topology, harness, trace, and evaluation artifacts checked'],
+    ['+165ms', 'policy.checked', 'Permissions, approval gates, denied actions, topology guardrails, and contradiction safeguards applied'],
+    ['+191ms', 'response.ready', 'Draft harness plan rendered']
   ];
   const trace = traceTuples.map(([offset, event, detail], index) => ({ sequence: index + 1, offset, event, detail, status: 'Complete' }));
 
@@ -195,25 +185,29 @@ export function analyzeRequirement(rawRequirement) {
   );
 
   const completeness = requirementAnalysis.score;
+  const architectureFit = architectureDecision.confidence;
   const safety = clamp(96 - Math.max(0, risk - 65) * 0.18 - requirementAnalysis.contradictions.length * 6);
   const efficiency = clamp(97 - subagents.length * 4 - Math.max(0, complexity - 80) * 0.15);
   const traceability = 98;
-  const overall = clamp((completeness + safety + efficiency + traceability) / 4);
+  const overall = clamp((completeness + architectureFit + safety + efficiency + traceability) / 5);
   const evaluation = {
     overall,
     dimensions: [
       { name: 'Requirement completeness', score: completeness },
+      { name: 'Architecture fit', score: architectureFit },
       { name: 'Safety boundary coverage', score: safety },
       { name: 'Execution efficiency', score: efficiency },
       { name: 'Traceability', score: traceability }
     ],
     verdict: requirementAnalysis.status === 'needs-input'
-      ? 'Draft architecture only; resolve requirement questions before live execution'
+      ? 'Draft topology only; resolve requirement questions before live execution'
       : requirementAnalysis.status === 'draft'
-        ? 'Usable draft plan with targeted requirement questions'
-        : overall >= 90
-          ? 'Strong deploy-first harness plan'
-          : 'Requirement-ready plan with targeted implementation questions'
+        ? 'Usable draft topology with targeted requirement questions'
+        : architectureDecision.confidence < 70
+          ? 'Topology needs targeted evidence before implementation'
+          : overall >= 90
+            ? 'Strong deploy-first harness plan'
+            : 'Requirement-ready plan with targeted implementation questions'
   };
 
   const capabilities = [];
@@ -225,11 +219,17 @@ export function analyzeRequirement(rawRequirement) {
   if (flags.externalAgents) capabilities.push('cross-agent interoperability');
   if (!capabilities.length) capabilities.push('structured interpretation and response generation');
 
-  const confidence = clamp(52 + requirementAnalysis.score * 0.45 - requirementAnalysis.contradictions.length * 8);
+  const confidence = clamp((requirementAnalysis.score + architectureDecision.confidence) / 2 - requirementAnalysis.contradictions.length * 4);
   const domain = domainKeys.length ? domainKeys.map((value) => value[0].toUpperCase() + value.slice(1)).join(' + ') : 'General operations';
   const readinessNote = requirementAnalysis.status === 'ready'
     ? 'The requirement is ready for a draft architecture.'
     : 'Treat this architecture as a draft until the prioritized requirement questions are resolved.';
+  const executionNote = topologyId === 'temporary-subagents'
+    ? `Use ${subagents.length} temporary specialists with isolated context and structured returns.`
+    : topologyId === 'external-agent-network'
+      ? 'Use authenticated A2A exchanges only for named external peers; do not model internal workers as A2A agents.'
+      : 'Do not add temporary subagents unless evaluation evidence demonstrates a measurable gain.';
+
   return {
     mode: 'Deterministic demo — no live model or external tool execution',
     runId: `DEMO-${id}`,
@@ -237,12 +237,13 @@ export function analyzeRequirement(rawRequirement) {
     domain,
     scores: { complexity, risk, confidence },
     requirementAnalysis,
+    architectureDecision,
     architecture,
-    recommendation: `${architecture.kind}. Use ${subagents.length ? `${subagents.length} temporary specialists` : 'no temporary subagents'} for this first harness plan, preserve structured artifacts, and keep external writes approval-gated. ${readinessNote}`,
+    recommendation: `${architectureDecision.selectedTopology.summary} ${executionNote} Preserve structured artifacts and keep external writes approval-gated. ${readinessNote}`,
     capabilities,
     protocols,
     subagents,
-    stages: makeStages(subagents),
+    stages: makeStages(subagents, architectureDecision),
     permissions,
     artifacts,
     trace,
@@ -253,10 +254,11 @@ export function analyzeRequirement(rawRequirement) {
       'Temporary agents cannot spawn child agents in this slice.',
       'Production mutation, deletion, and paid model usage remain disabled.',
       'All retained knowledge is represented as validated artifacts and trace events.',
-      'Requirement intelligence quotes only supplied evidence and leaves unsupported details missing.',
+      'Requirement intelligence and topology factors quote only supplied evidence; unsupported details remain absent.',
+      ...architectureDecision.guardrails,
       ...requirementAnalysis.contradictions.map((contradiction) => `Resolve requirement contradiction before live execution: ${contradiction.statement}`),
       'This deployed skeleton plans and critiques deterministically; it does not execute external tools.'
-    ].slice(0, 64)
+    ].filter((item, index, items) => items.indexOf(item) === index).slice(0, 64)
   };
 }
 

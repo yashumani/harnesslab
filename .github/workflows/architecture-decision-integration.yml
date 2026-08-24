@@ -1,0 +1,104 @@
+name: Architecture Decision Integration
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'scripts/verify-architecture-decision-browser.mjs'
+      - 'scripts/validate-architecture-decision.mjs'
+      - 'tests/**'
+      - '.github/workflows/architecture-decision-integration.yml'
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: architecture-decision-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  topology-advisor:
+    name: Decision / browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Validate decision modules
+        run: |
+          node --check apps/web/architecture-decision.js
+          node --check apps/web/architecture-decision-panel.js
+          node --check scripts/verify-architecture-decision-browser.mjs
+          node scripts/validate-architecture-decision.mjs
+
+      - name: Exercise the topology advisor through Chromium
+        shell: bash
+        env:
+          CHROME_DEBUG_PORT: '9226'
+        run: |
+          set -euo pipefail
+          mkdir -p architecture-decision-evidence
+
+          python3 -m http.server 4176 --directory apps/web > /tmp/harnesslab-decision-http.log 2>&1 &
+          server_pid=$!
+
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "${browser}" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.'
+            exit 1
+          fi
+
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-port=9226 \
+            --user-data-dir=/tmp/harnesslab-decision-chrome \
+            about:blank > /tmp/harnesslab-decision-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${server_pid}" "${browser_pid}" 2>/dev/null || true' EXIT
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4176/ > /dev/null \
+              && curl --fail --silent http://127.0.0.1:9226/json/version > /dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          node scripts/verify-architecture-decision-browser.mjs \
+            'http://127.0.0.1:4176/?architecture-decision-integration=1' \
+            architecture-decision-evidence/result.json
+
+      - name: Upload topology advisor evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-architecture-decision-integration
+          path: architecture-decision-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summarize the decision boundary
+        shell: bash
+        run: |
+          {
+            echo '### Agent-necessity and topology advisor'
+            echo
+            echo '- Real no-build React UI: mounted'
+            echo '- Programmatic requirement synchronization: verified'
+            echo '- External-agent-network decision and A2A fit: verified'
+            echo '- Evidence-backed factor contract: verified'
+            echo '- Modal inertness, focus entry, focus trap, and restoration: verified'
+            echo '- Model, gateway, and provider requests: zero'
+          } >> "$GITHUB_STEP_SUMMARY"
