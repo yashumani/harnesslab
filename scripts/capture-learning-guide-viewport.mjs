@@ -140,7 +140,12 @@ try {
     screenWidth: width,
     screenHeight: height,
     positionX: 0,
-    positionY: 0
+    positionY: 0,
+    dontSetVisibleSize: false
+  });
+  await client.send('Emulation.setTouchEmulationEnabled', {
+    enabled: width <= 760,
+    maxTouchPoints: width <= 760 ? 5 : 1
   });
   await client.send('Emulation.setScrollbarsHidden', { hidden: true });
 
