@@ -2,13 +2,26 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [mainHtml, hubJs, hubCss, guideHtml, guideCss, guideJs] = await Promise.all([
+const [
+  mainHtml,
+  hubJs,
+  hubCss,
+  guideHtml,
+  guideCss,
+  guideJs,
+  captureViewport,
+  integrationWorkflow,
+  liveWorkflow
+] = await Promise.all([
   readFile('apps/web/index.html', 'utf8'),
   readFile('apps/web/learn-hub.js', 'utf8'),
   readFile('apps/web/learn-hub.css', 'utf8'),
   readFile('apps/web/guide/index.html', 'utf8'),
   readFile('apps/web/guide/guide.css', 'utf8'),
-  readFile('apps/web/guide/guide.js', 'utf8')
+  readFile('apps/web/guide/guide.js', 'utf8'),
+  readFile('scripts/capture-learning-guide-viewport.mjs', 'utf8'),
+  readFile('.github/workflows/learning-guide-integration.yml', 'utf8'),
+  readFile('.github/workflows/verify-learning-guide-pages.yml', 'utf8')
 ]);
 
 test('adds a non-destructive learning entry after the builder application', () => {
@@ -70,6 +83,7 @@ test('guide supports keyboard, touch, overview, deep links, fullscreen, and prin
   assert.match(guideJs, /requestFullscreen/);
   assert.match(guideJs, /window\.print\(\)/);
   assert.match(guideJs, /shell\.setAttribute\('inert'/);
+  assert.match(guideJs, /globalThis\.scrollTo\(0, 0\)/);
 });
 
 test('guide stays responsive, printable, reduced-motion aware, and network-free', () => {
@@ -80,4 +94,21 @@ test('guide stays responsive, printable, reduced-motion aware, and network-free'
   assert.match(guideCss, /prefers-reduced-motion/);
   assert.doesNotMatch(guideJs, /fetch\(|XMLHttpRequest|WebSocket/);
   assert.doesNotMatch(`${guideHtml}\n${guideJs}\n${guideCss}`, /OPENROUTER_API_KEY|authorization\s*:/i);
+});
+
+test('responsive evidence uses exact Chrome DevTools viewport emulation', () => {
+  assert.match(captureViewport, /Emulation\.setDeviceMetricsOverride/);
+  assert.match(captureViewport, /Page\.captureScreenshot/);
+  assert.match(captureViewport, /pageOverflowX/);
+  assert.match(captureViewport, /clippedInteractive/);
+  assert.match(captureViewport, /bodyScroll\.x/);
+  assert.match(captureViewport, /topbarRect/);
+  assert.match(captureViewport, /consoleMessages/);
+
+  for (const workflow of [integrationWorkflow, liveWorkflow]) {
+    assert.match(workflow, /capture-learning-guide-viewport\.mjs/);
+    assert.match(workflow, /desktop 1440 900/);
+    assert.match(workflow, /phone 390 844/);
+    assert.doesNotMatch(workflow, /--window-size=/);
+  }
 });
