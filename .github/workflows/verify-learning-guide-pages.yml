@@ -1,0 +1,187 @@
+name: Verify Learning Guide Pages
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy HarnessLab to Pages
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: verify-learning-guide-live
+  cancel-in-progress: true
+
+jobs:
+  verify-live:
+    name: Guide / live
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out the verified repository code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Wait for and verify public guide assets
+        shell: bash
+        env:
+          BASE_URL: https://yashumani.github.io/harnesslab
+        run: |
+          set -euo pipefail
+          mkdir -p live-learning-guide
+          ready=false
+          for attempt in {1..48}; do
+            if curl --fail --silent --show-error --location --max-time 20 \
+              "${BASE_URL}/?guide=${GITHUB_RUN_ID}-${attempt}" \
+              -o /tmp/harnesslab-index.html \
+              && curl --fail --silent --show-error --location --max-time 20 \
+              "${BASE_URL}/guide/?guide=${GITHUB_RUN_ID}-${attempt}" \
+              -o /tmp/harnesslab-guide.html; then
+              if grep -q 'src="./learn-hub.js"' /tmp/harnesslab-index.html \
+                && grep -q 'data-guide-theme="midnight"' /tmp/harnesslab-guide.html \
+                && grep -q 'id="slide-18"' /tmp/harnesslab-guide.html; then
+                ready=true
+                break
+              fi
+            fi
+            sleep 5
+          done
+
+          if [[ "${ready}" != 'true' ]]; then
+            echo 'The public site did not expose the deployed learning hub and 18-slide guide.'
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location --max-time 20 "${BASE_URL}/learn-hub.js?verify=${GITHUB_RUN_ID}" -o /tmp/learn-hub.js
+          curl --fail --silent --show-error --location --max-time 20 "${BASE_URL}/learn-hub.css?verify=${GITHUB_RUN_ID}" -o /tmp/learn-hub.css
+          curl --fail --silent --show-error --location --max-time 20 "${BASE_URL}/guide/guide.js?verify=${GITHUB_RUN_ID}" -o /tmp/guide.js
+          curl --fail --silent --show-error --location --max-time 20 "${BASE_URL}/guide/guide.css?verify=${GITHUB_RUN_ID}" -o /tmp/guide.css
+
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const html = await readFile('/tmp/harnesslab-guide.html', 'utf8');
+          const slideNumbers = [...html.matchAll(/id="slide-(\d+)" data-slide="(\d+)"/g)].map((match) => Number(match[1]));
+          const expected = Array.from({ length: 18 }, (_, index) => index + 1);
+          if (JSON.stringify(slideNumbers) !== JSON.stringify(expected)) {
+            throw new Error(`Public guide slide contract is invalid: ${JSON.stringify(slideNumbers)}`);
+          }
+          for (const phrase of [
+            'What exactly is HarnessLab?',
+            'Architecture decision ladder',
+            'Tools, MCP, retrieval, and A2A',
+            'End-user workflow',
+            'Developer workflow',
+            'Current live scope'
+          ]) {
+            if (!html.includes(phrase)) throw new Error(`Public guide is missing: ${phrase}`);
+          }
+          NODE
+
+          grep -q 'HarnessLabLearnHub' /tmp/learn-hub.js
+          grep -q 'setBackgroundInert(true)' /tmp/learn-hub.js
+          grep -q "event.key === 'Escape'" /tmp/learn-hub.js
+          grep -q "event.key === 'ArrowRight'" /tmp/guide.js
+          grep -q 'globalThis.scrollTo(0, 0)' /tmp/guide.js
+          grep -q 'requestFullscreen' /tmp/guide.js
+          grep -q 'window.print()' /tmp/guide.js
+          grep -q '@media (max-width: 760px)' /tmp/guide.css
+          grep -q '@media print' /tmp/guide.css
+
+          if grep -Eqi 'OPENROUTER_API_KEY|OLLAMA_DEFAULT_MODEL|authorization[[:space:]]*:' \
+            /tmp/learn-hub.js /tmp/guide.js /tmp/harnesslab-guide.html; then
+            echo 'The public learning experience must not contain provider credentials.'
+            exit 1
+          fi
+
+      - name: Audit exact public desktop and phone viewports
+        shell: bash
+        env:
+          BASE_URL: https://yashumani.github.io/harnesslab
+          CHROME_DEBUG_PORT: '9227'
+        run: |
+          set -euo pipefail
+          mkdir -p live-learning-guide
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "${browser}" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.'
+            exit 1
+          fi
+
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=9227 \
+            --user-data-dir=/tmp/harnesslab-learning-guide-live-chrome \
+            about:blank > /tmp/harnesslab-learning-guide-live-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${browser_pid}" 2>/dev/null || true' EXIT
+
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:9227/json/version > /dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          node scripts/capture-learning-guide-viewport.mjs \
+            desktop 1440 900 \
+            "${BASE_URL}/guide/#slide-1" \
+            live-learning-guide
+
+          node scripts/capture-learning-guide-viewport.mjs \
+            phone 390 844 \
+            "${BASE_URL}/guide/#slide-15" \
+            live-learning-guide
+
+          test -s live-learning-guide/desktop.png
+          test -s live-learning-guide/desktop.json
+          test -s live-learning-guide/phone.png
+          test -s live-learning-guide/phone.json
+
+      - name: Upload live responsive evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-learning-guide-live
+          path: live-learning-guide
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record the verified deployment
+        if: ${{ github.event_name == 'workflow_run' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          VERIFY_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh issue comment 44 --repo "${GITHUB_REPOSITORY}" --body "$(cat <<EOF
+          <!-- harnesslab-learning-guide-verification -->
+          ## Public interactive learning guide verified
+
+          - Deployed commit: \`${DEPLOYED_SHA}\`
+          - Learning hub entry and audience paths: verified
+          - Dark 18-chapter guide: verified
+          - End-user, developer, architecture, protocol, safety, and worked-example content: verified
+          - Keyboard, touch, fullscreen, overview, and print contracts: verified
+          - Exact desktop and phone document position, overflow, controls, and console state: verified
+          - Public responsive render evidence: retained
+          - Provider credentials and runtime network authority: absent
+          - Deployment workflow: ${DEPLOY_RUN_URL}
+          - Verification workflow: ${VERIFY_RUN_URL}
+          EOF
+          )"

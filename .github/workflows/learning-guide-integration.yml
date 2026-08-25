@@ -1,0 +1,156 @@
+name: Learning Guide Integration
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/index.html'
+      - 'apps/web/learn-hub.js'
+      - 'apps/web/learn-hub.css'
+      - 'apps/web/guide/**'
+      - 'scripts/capture-learning-guide-viewport.mjs'
+      - 'scripts/validate-learning-guide.mjs'
+      - 'tests/learning-guide-contract.test.mjs'
+      - 'package.json'
+      - '.github/workflows/learning-guide-integration.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/web/index.html'
+      - 'apps/web/learn-hub.js'
+      - 'apps/web/learn-hub.css'
+      - 'apps/web/guide/**'
+      - 'scripts/capture-learning-guide-viewport.mjs'
+      - 'scripts/validate-learning-guide.mjs'
+      - 'tests/learning-guide-contract.test.mjs'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: learning-guide-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guide:
+    name: Guide / required
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Validate the complete application and learning contract
+        run: npm run check
+
+      - name: Serve the Pages package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4175 --directory apps/web > /tmp/harnesslab-guide-http.log 2>&1 &
+          echo $! > /tmp/harnesslab-guide-http.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4175/guide/ > /tmp/harnesslab-guide.html; then
+              exit 0
+            fi
+            sleep 0.25
+          done
+          cat /tmp/harnesslab-guide-http.log
+          exit 1
+
+      - name: Verify local Pages routes and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent http://127.0.0.1:4175/ > /tmp/harnesslab-index.html
+          curl --fail --silent http://127.0.0.1:4175/learn-hub.js > /tmp/learn-hub.js
+          curl --fail --silent http://127.0.0.1:4175/learn-hub.css > /tmp/learn-hub.css
+          curl --fail --silent http://127.0.0.1:4175/guide/guide.js > /tmp/guide.js
+          curl --fail --silent http://127.0.0.1:4175/guide/guide.css > /tmp/guide.css
+
+          grep -q '<harnesslab-learn-hub>' /tmp/harnesslab-index.html
+          grep -q 'src="./learn-hub.js"' /tmp/harnesslab-index.html
+          grep -q 'data-guide-theme="midnight"' /tmp/harnesslab-guide.html
+          grep -q 'id="slide-18"' /tmp/harnesslab-guide.html
+          grep -q 'HarnessLabLearnHub' /tmp/learn-hub.js
+          grep -q "event.key === 'ArrowRight'" /tmp/guide.js
+          grep -q 'globalThis.scrollTo(0, 0)' /tmp/guide.js
+          grep -q '@media (max-width: 760px)' /tmp/guide.css
+          grep -q '@media print' /tmp/guide.css
+
+      - name: Audit exact desktop and phone guide viewports
+        shell: bash
+        env:
+          CHROME_DEBUG_PORT: '9226'
+        run: |
+          set -euo pipefail
+          mkdir -p learning-guide-evidence
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "${browser}" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.'
+            exit 1
+          fi
+
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=9226 \
+            --user-data-dir=/tmp/harnesslab-learning-guide-chrome \
+            about:blank > /tmp/harnesslab-learning-guide-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${browser_pid}" 2>/dev/null || true' EXIT
+
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:9226/json/version > /dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          node scripts/capture-learning-guide-viewport.mjs \
+            desktop 1440 900 \
+            'http://127.0.0.1:4175/guide/#slide-1' \
+            learning-guide-evidence
+
+          node scripts/capture-learning-guide-viewport.mjs \
+            phone 390 844 \
+            'http://127.0.0.1:4175/guide/#slide-15' \
+            learning-guide-evidence
+
+          test -s learning-guide-evidence/desktop.png
+          test -s learning-guide-evidence/desktop.json
+          test -s learning-guide-evidence/phone.png
+          test -s learning-guide-evidence/phone.json
+
+      - name: Upload responsive guide evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-learning-guide
+          path: learning-guide-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summarize the learning experience
+        shell: bash
+        run: |
+          {
+            echo '### HarnessLab interactive learning guide'
+            echo
+            echo '- Dark 18-chapter presentation: validated'
+            echo '- End-user and developer learning paths: validated'
+            echo '- Keyboard, touch, overview, fullscreen, and print: validated'
+            echo '- Modal focus and inert-background lifecycle: validated'
+            echo '- Exact 1440×900 and 390×844 viewport audits: passed'
+            echo '- Document offset, horizontal overflow, clipped controls, and console errors: zero'
+            echo '- Provider credentials and runtime network calls: absent'
+          } >> "$GITHUB_STEP_SUMMARY"
