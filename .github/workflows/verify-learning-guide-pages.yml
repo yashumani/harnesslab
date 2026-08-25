@@ -23,6 +23,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
+      - name: Check out the verified repository code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
       - name: Wait for and verify public guide assets
         shell: bash
         env:
@@ -82,6 +91,7 @@ jobs:
           grep -q 'setBackgroundInert(true)' /tmp/learn-hub.js
           grep -q "event.key === 'Escape'" /tmp/learn-hub.js
           grep -q "event.key === 'ArrowRight'" /tmp/guide.js
+          grep -q 'globalThis.scrollTo(0, 0)' /tmp/guide.js
           grep -q 'requestFullscreen' /tmp/guide.js
           grep -q 'window.print()' /tmp/guide.js
           grep -q '@media (max-width: 760px)' /tmp/guide.css
@@ -93,10 +103,11 @@ jobs:
             exit 1
           fi
 
-      - name: Render the public desktop and phone guide
+      - name: Audit exact public desktop and phone viewports
         shell: bash
         env:
           BASE_URL: https://yashumani.github.io/harnesslab
+          CHROME_DEBUG_PORT: '9227'
         run: |
           set -euo pipefail
           mkdir -p live-learning-guide
@@ -106,18 +117,39 @@ jobs:
             exit 1
           fi
 
-          "${browser}" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
-            --hide-scrollbars --virtual-time-budget=3000 --window-size=1440,900 \
-            --screenshot=live-learning-guide/desktop.png \
-            "${BASE_URL}/guide/#slide-1"
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=9227 \
+            --user-data-dir=/tmp/harnesslab-learning-guide-live-chrome \
+            about:blank > /tmp/harnesslab-learning-guide-live-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${browser_pid}" 2>/dev/null || true' EXIT
 
-          "${browser}" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
-            --hide-scrollbars --virtual-time-budget=3000 --window-size=390,844 \
-            --screenshot=live-learning-guide/phone.png \
-            "${BASE_URL}/guide/#slide-15"
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:9227/json/version > /dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          node scripts/capture-learning-guide-viewport.mjs \
+            desktop 1440 900 \
+            "${BASE_URL}/guide/#slide-1" \
+            live-learning-guide
+
+          node scripts/capture-learning-guide-viewport.mjs \
+            phone 390 844 \
+            "${BASE_URL}/guide/#slide-15" \
+            live-learning-guide
 
           test -s live-learning-guide/desktop.png
+          test -s live-learning-guide/desktop.json
           test -s live-learning-guide/phone.png
+          test -s live-learning-guide/phone.json
 
       - name: Upload live responsive evidence
         uses: actions/upload-artifact@v4
@@ -146,7 +178,8 @@ jobs:
           - Dark 18-chapter guide: verified
           - End-user, developer, architecture, protocol, safety, and worked-example content: verified
           - Keyboard, touch, fullscreen, overview, and print contracts: verified
-          - Desktop and phone public render evidence: retained
+          - Exact desktop and phone document position, overflow, controls, and console state: verified
+          - Public responsive render evidence: retained
           - Provider credentials and runtime network authority: absent
           - Deployment workflow: ${DEPLOY_RUN_URL}
           - Verification workflow: ${VERIFY_RUN_URL}
