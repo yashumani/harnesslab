@@ -136,7 +136,7 @@ try {
     width,
     height,
     deviceScaleFactor: 1,
-    mobile: width <= 760,
+    mobile: false,
     screenWidth: width,
     screenHeight: height,
     positionX: 0,
@@ -199,6 +199,7 @@ try {
       return {
         title: document.title,
         viewport: { width: innerWidth, height: innerHeight },
+        touchPoints: navigator.maxTouchPoints,
         bodyScroll: { x: scrollX, y: scrollY },
         pageOverflowX: root.scrollWidth > innerWidth + 1,
         scrollWidth: root.scrollWidth,
@@ -226,6 +227,7 @@ try {
   const expectedSlide = new URL(url).hash.match(/^#slide-(\d+)$/)?.[1] || '1';
   const errors = [];
   if (diagnostics.viewport.width !== width || diagnostics.viewport.height !== height) errors.push('viewport dimensions do not match the requested CSS viewport');
+  if (width <= 760 && diagnostics.touchPoints < 1) errors.push('phone viewport does not expose touch input');
   if (diagnostics.slideCount !== 18) errors.push('slide count is not 18');
   if (diagnostics.activeSlide !== expectedSlide) errors.push(`expected slide ${expectedSlide}, received ${diagnostics.activeSlide}`);
   if (diagnostics.pageOverflowX) errors.push(`page horizontally overflows: ${diagnostics.scrollWidth}px for ${width}px viewport`);
