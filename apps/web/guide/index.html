@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en" data-guide-theme="midnight">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#030712">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A detailed interactive guide to HarnessLab for end users, developers, architects, and AI teams.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
+  <title>HarnessLab Guide — From AI Idea to Dependable Harness</title>
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./guide.css">
+</head>
+<body>
+  <a class="skip-link" href="#guideDeck">Skip to presentation</a>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+
+  <div class="guide-shell">
+    <header class="guide-topbar">
+      <a class="guide-brand" href="../" aria-label="Return to HarnessLab builder">
+        <span class="brand-mark" aria-hidden="true">H</span>
+        <span><strong>Harness<span>Lab</span></strong><small>Architecture guide</small></span>
+      </a>
+      <div class="guide-title-block">
+        <span>Interactive learning path</span>
+        <strong id="currentSlideTitle">What HarnessLab is</strong>
+      </div>
+      <div class="guide-actions" aria-label="Presentation actions">
+        <button type="button" id="overviewButton" aria-expanded="false" aria-controls="overviewPanel"><span aria-hidden="true">◇</span><b>Overview</b></button>
+        <button type="button" id="printButton"><span aria-hidden="true">⌁</span><b>Print</b></button>
+        <button type="button" id="fullscreenButton" aria-pressed="false" title="Enter fullscreen (F)"><span aria-hidden="true">⛶</span><b>Fullscreen</b></button>
+        <a href="../"><span aria-hidden="true">←</span><b>Builder</b></a>
+      </div>
+    </header>
+
+    <div class="guide-layout">
+      <nav class="slide-rail" aria-label="Presentation slides">
+        <div class="rail-heading"><span>Guide</span><strong>18 chapters</strong></div>
+        <div id="slideRail" class="rail-list"></div>
+        <div class="rail-tip"><kbd>←</kbd><kbd>→</kbd><span>Navigate</span></div>
+      </nav>
+
+      <main id="guideDeck" class="deck" tabindex="-1">
+        <section class="slide cover-slide" id="slide-1" data-slide="1" data-title="What HarnessLab is" aria-labelledby="slide-1-title">
+          <div class="slide-number" aria-hidden="true">01</div>
+          <div class="cover-grid">
+            <div class="cover-copy">
+              <span class="eyebrow"><i></i>AI-assisted by design</span>
+              <h1 id="slide-1-title">Build safer agents.<br>Ship with <em>confidence.</em></h1>
+              <p class="lead">HarnessLab turns a rough AI idea into a safe, explainable, testable harness plan—with clear architecture choices, restrictions, evidence, and implementation guidance.</p>
+              <div class="audience-pills"><span>Newcomers</span><span>End users</span><span>Developers</span><span>Architects</span><span>Data & AI teams</span></div>
+            </div>
+            <div class="agent-orbit" role="img" aria-label="An AI agent connected to code, orchestration, data, and policy">
+              <div class="orbit-ring ring-one"></div><div class="orbit-ring ring-two"></div><div class="orbit-ring ring-three"></div>
+              <div class="orbit-node center-node"><span>AI</span><b>Agent</b></div>
+              <div class="orbit-node orbit-code"><span>&lt;/&gt;</span><b>Code</b></div>
+              <div class="orbit-node orbit-data"><span>◉</span><b>Data</b></div>
+              <div class="orbit-node orbit-flow"><span>⌘</span><b>Orchestration</b></div>
+              <div class="orbit-node orbit-policy"><span>✓</span><b>Policy</b></div>
+            </div>
+          </div>
+          <div class="card-grid four-up capability-grid">
+            <article><span>01</span><h3>Clarify requirements</h3><p>Detect gaps, contradictions, unsupported assumptions, and missing decisions.</p></article>
+            <article><span>02</span><h3>Choose the right architecture</h3><p>Decide when to use software, a workflow, an agent, temporary specialists, or A2A.</p></article>
+            <article><span>03</span><h3>Define boundaries</h3><p>Explain tools, MCP, retrieval, approvals, permissions, and restrictions.</p></article>
+            <article><span>04</span><h3>Produce implementation guidance</h3><p>Create artifacts, stages, safety rules, evaluation criteria, and next actions.</p></article>
+          </div>
+          <div class="flow-strip"><span>Use case</span><b>→</b><span>Requirement readiness</span><b>→</b><span>Architecture decision</span><b>→</b><span>Critic review</span><b>→</b><span>Versioned result</span></div>
+          <div class="principle-banner"><span>✦</span><strong>Core principle:</strong> choose the least complex architecture that satisfies the use case.</div>
+        </section>
+
+        <section class="slide" id="slide-2" data-slide="2" data-title="What exactly is HarnessLab?" aria-labelledby="slide-2-title" hidden>
+          <div class="slide-number" aria-hidden="true">02</div>
+          <header class="slide-heading"><span class="chapter">Foundation</span><h2 id="slide-2-title">What exactly is HarnessLab?</h2><p>A guided platform for deciding what to build, how much agency to use, and how to keep the system dependable.</p></header>
+          <div class="two-column">
+            <div class="stack">
+              <article class="panel accent-blue"><span class="panel-index">1</span><h3>Plain English</h3><ul><li>A coach for AI and agent design.</li><li>Turns a fuzzy use case into a clear, testable plan.</li><li>Points out missing details, contradictions, and risky assumptions.</li><li>Explains whether you need ordinary software, a workflow, one agent, temporary subagents, or A2A.</li></ul></article>
+              <article class="panel accent-violet"><span class="panel-index">2</span><h3>Technical view</h3><ul><li>Browser-first product with deterministic analysis and typed result contracts.</li><li>Requirement intelligence, topology guidance, policy design, and critic review.</li><li>Optional gateway for deterministic, Ollama, and free-only OpenRouter modes.</li><li>Versioned artifacts, execution traces, evidence, and evaluation outputs.</li></ul></article>
+            </div>
+            <article class="panel process-panel"><h3>What it actually does</h3><div class="vertical-flow"><div><span>1</span><b>Use case</b><small>Your real problem and desired outcome</small></div><i></i><div><span>2</span><b>Requirement analysis</b><small>Evidence, gaps, constraints, contradictions</small></div><i></i><div><span>3</span><b>Architecture guidance</b><small>Least-complex topology and protocol fit</small></div><i></i><div><span>4</span><b>Critic review</b><small>Second-pass safety and quality challenge</small></div><i></i><div><span>5</span><b>Versioned result</b><small>Retained plan, artifacts, trace, and scores</small></div></div></article>
+          </div>
+          <div class="output-row"><article><span>◴</span><b>Readiness score</b></article><article><span>?</span><b>Clarification questions</b></article><article><span>⌘</span><b>Harness architecture</b></article><article><span>✓</span><b>Safety boundaries</b></article><article><span>◇</span><b>Saved version</b></article></div>
+          <div class="principle-banner"><span>✦</span><strong>Key idea:</strong> HarnessLab does not start by coding. It starts by making the decision process explicit.</div>
+        </section>
+
+        <section class="slide" id="slide-3" data-slide="3" data-title="What a harness means" aria-labelledby="slide-3-title" hidden>
+          <div class="slide-number" aria-hidden="true">03</div>
+          <header class="slide-heading"><span class="chapter">Core concept</span><h2 id="slide-3-title">A harness is the control system around AI</h2><p>The model is only one component. The harness controls what enters, what can happen, what must be returned, and how the result is judged.</p></header>
+          <div class="harness-diagram">
+            <div class="harness-ring outer"><span>Observability · budgets · retries · audit</span></div>
+            <div class="harness-ring middle"><span>Context · tools · permissions · state</span></div>
+            <div class="harness-ring inner"><span>Prompts · schemas · validation</span></div>
+            <div class="harness-core"><b>Model or deterministic logic</b><small>replaceable reasoning engine</small></div>
+          </div>
+          <div class="card-grid six-up compact-cards">
+            <article><h3>Inputs</h3><p>Requirements, context, user intent, data references.</p></article><article><h3>Decisions</h3><p>Workflow, agent, protocols, autonomy, approvals.</p></article><article><h3>Actions</h3><p>Typed tools exposed through least privilege.</p></article><article><h3>Outputs</h3><p>Structured artifacts rather than unbounded prose.</p></article><article><h3>Evidence</h3><p>Trace, citations, evaluations, and uncertainty.</p></article><article><h3>Recovery</h3><p>Timeouts, retries, fallback, cancellation, disposal.</p></article>
+          </div>
+          <div class="compare-band"><div><span>Model-first thinking</span><p>“Which model should I call?”</p></div><b>→</b><div><span>Harness-first thinking</span><p>“What system must remain dependable even when models change?”</p></div></div>
+          <div class="principle-banner"><span>✦</span><strong>Durable rule:</strong> agents are disposable, harnesses are durable, and knowledge survives as validated artifacts.</div>
+        </section>
+
+        <section class="slide" id="slide-4" data-slide="4" data-title="Who HarnessLab is for" aria-labelledby="slide-4-title" hidden>
+          <div class="slide-number" aria-hidden="true">04</div>
+          <header class="slide-heading"><span class="chapter">Audience</span><h2 id="slide-4-title">Who HarnessLab is for—and the problems it solves</h2><p>Designed for both end users and developers who need clarity before they build.</p></header>
+          <div class="two-column">
+            <article class="panel"><h3>Who it helps</h3><div class="persona-list"><div><span>N</span><b>Newcomers</b><p>Learn what a harness is and when an agent is actually needed.</p></div><div><span>D</span><b>Developers</b><p>Get an implementation path with boundaries, interfaces, and tests.</p></div><div><span>A</span><b>Architects</b><p>Choose the least-complex safe topology for the use case.</p></div><div><span>P</span><b>Product / Data teams</b><p>Turn fuzzy ideas into testable system requirements.</p></div></div></article>
+            <article class="panel"><h3>Common pain points</h3><div class="pain-list"><p><span>?</span>Requirements are vague</p><p><span>⚖</span>AI is overused or underused</p><p><span>⌘</span>Harness, agent, MCP, retrieval, and A2A are confused</p><p><span>✓</span>Restrictions and approvals are unclear</p><p><span>&lt;/&gt;</span>Teams start coding before decisions are explicit</p></div></article>
+          </div>
+          <div class="transformation"><div><h3>Unclear idea</h3><div class="sticky-row"><span>Build an AI agent</span><span>Use MCP or API?</span><span>Need approvals?</span><span>Where does data go?</span></div></div><b>→</b><div><h3>HarnessLab outcome</h3><div class="output-row"><article><b>Clear scope</b></article><article><b>Right architecture</b></article><article><b>Safe boundaries</b></article><article><b>Next steps</b></article></div></div></div>
+          <div class="principle-banner"><span>✦</span><strong>Outcome:</strong> less confusion, less architecture churn, and fewer unsafe assumptions.</div>
+        </section>
+
+        <section class="slide" id="slide-5" data-slide="5" data-title="The end-to-end journey" aria-labelledby="slide-5-title" hidden>
+          <div class="slide-number" aria-hidden="true">05</div>
+          <header class="slide-heading"><span class="chapter">Product journey</span><h2 id="slide-5-title">From a rough idea to a versioned harness result</h2><p>Every stage narrows uncertainty and adds a durable control or artifact.</p></header>
+          <div class="journey-grid">
+            <article><span>01</span><h3>Describe</h3><p>State the outcome in plain English.</p><small>Artifact: Requirement draft</small></article>
+            <article><span>02</span><h3>Assess</h3><p>Score ten requirement dimensions from supplied evidence.</p><small>Artifact: Requirement assessment</small></article>
+            <article><span>03</span><h3>Clarify</h3><p>Resolve gaps, contradictions, and ownership questions.</p><small>Artifact: Prioritized questions</small></article>
+            <article><span>04</span><h3>Decide</h3><p>Select the least-complex topology and protocol fit.</p><small>Artifact: Architecture decision</small></article>
+            <article><span>05</span><h3>Bound</h3><p>Define permissions, approvals, timeouts, and denied actions.</p><small>Artifact: Harness specification</small></article>
+            <article><span>06</span><h3>Challenge</h3><p>Run a critic against assumptions and control gaps.</p><small>Artifact: Critic review</small></article>
+            <article><span>07</span><h3>Evaluate</h3><p>Score completeness, safety, efficiency, and traceability.</p><small>Artifact: Evaluation summary</small></article>
+            <article><span>08</span><h3>Version</h3><p>Save the exact result before implementation begins.</p><small>Artifact: Immutable project version</small></article>
+          </div>
+          <div class="principle-banner"><span>✦</span><strong>Deploy-first principle:</strong> prove one complete vertical path before adding more agents, integrations, or automation.</div>
+        </section>
+
+        <section class="slide" id="slide-6" data-slide="6" data-title="Requirement intelligence" aria-labelledby="slide-6-title" hidden>
+          <div class="slide-number" aria-hidden="true">06</div>
+          <header class="slide-heading"><span class="chapter">Requirement intelligence</span><h2 id="slide-6-title">Good architecture begins with evidence-backed requirements</h2><p>HarnessLab evaluates only what the user actually supplied. Missing details remain missing instead of being silently invented.</p></header>
+          <div class="readiness-layout">
+            <article class="score-panel"><div class="score-ring"><strong>72</strong><span>/100</span></div><h3>Draft with gaps</h3><p>The use case supports a draft architecture, but targeted questions must be resolved before live execution.</p><div class="score-legend"><span><i class="green"></i>Covered</span><span><i class="amber"></i>Partial</span><span><i class="red"></i>Missing</span></div></article>
+            <div class="dimension-grid">
+              <article><span>01</span><b>Objective</b></article><article><span>02</span><b>Users & stakeholders</b></article><article><span>03</span><b>Inputs & data</b></article><article><span>04</span><b>Output & deliverable</b></article><article><span>05</span><b>Systems & integrations</b></article><article><span>06</span><b>Allowed actions</b></article><article><span>07</span><b>Prohibited actions</b></article><article><span>08</span><b>Autonomy & approval</b></article><article><span>09</span><b>Success criteria</b></article><article><span>10</span><b>Reliability, cost, privacy</b></article>
+            </div>
+          </div>
+          <div class="contradiction-row"><article><span>Conflict</span><b>“Fully autonomous”</b><i>versus</i><b>“Human approval before every action”</b></article><article><span>Resolution question</span><p>Which exact actions may run autonomously, and which require a named approver?</p></article></div>
+          <div class="principle-banner"><span>✦</span><strong>Evidence rule:</strong> quote supplied evidence, flag contradictions conservatively, and ask the highest-value questions first.</div>
+        </section>
+
+        <section class="slide" id="slide-7" data-slide="7" data-title="Architecture decision ladder" aria-labelledby="slide-7-title" hidden>
+          <div class="slide-number" aria-hidden="true">07</div>
+          <header class="slide-heading"><span class="chapter">Architecture choice</span><h2 id="slide-7-title">Architecture decision ladder</h2><p>Escalate only when the simpler option no longer fits the evidence.</p></header>
+          <div class="decision-layout">
+            <div class="decision-ladder">
+              <article><span>1</span><h3>Deterministic software</h3><p>Best for exact rules, transforms, calculations, and predictable logic.</p></article>
+              <article><span>2</span><h3>LLM feature with deterministic wrapper</h3><p>One reasoning step inside strict validation, policy, and output shape.</p></article>
+              <article><span>3</span><h3>Deterministic workflow</h3><p>A fixed multi-step sequence with known order and low autonomy.</p></article>
+              <article><span>4</span><h3>Single bounded agent</h3><p>Useful when the next step depends on observed intermediate results.</p></article>
+              <article><span>5</span><h3>Orchestrator with temporary subagents</h3><p>Use only for truly independent parallel workstreams.</p></article>
+              <article><span>6</span><h3>External A2A network</h3><p>Use only when separately operated agents exchange tasks and artifacts.</p></article>
+            </div>
+            <aside class="rules-panel"><h3>Core decision rules</h3><ul><li>Choose the least-complex topology supported by evidence.</li><li>Risk adds containment and approval; it never justifies more agency.</li><li>Temporary subagents should be short-lived, isolated, and disposable.</li><li>A2A is for real external trust boundaries, not internal helper workers.</li><li>Upgrade only after evaluation proves the simpler option is insufficient.</li></ul></aside>
+          </div>
+          <div class="principle-banner"><span>✦</span><strong>Architecture is a decision ladder,</strong> not a race to the most agentic design.</div>
+        </section>
+
+        <section class="slide" id="slide-8" data-slide="8" data-title="How topology is chosen" aria-labelledby="slide-8-title" hidden>
+          <div class="slide-number" aria-hidden="true">08</div>
+          <header class="slide-heading"><span class="chapter">Decision evidence</span><h2 id="slide-8-title">Nine factors determine how much agency is justified</h2><p>The decision should be explainable and tied to requirement evidence, not to fashionable architecture.</p></header>
+          <div class="factor-grid">
+            <article><span>01</span><h3>Interpretation uncertainty</h3><p>Does the task need judgment, comparison, synthesis, or ambiguous-language handling?</p></article>
+            <article><span>02</span><h3>Deterministic sequence</h3><p>Can the entire task be expressed as known steps and exact rules?</p></article>
+            <article><span>03</span><h3>Iteration & recovery</h3><p>Does the next action depend on intermediate results, failures, or retries?</p></article>
+            <article><span>04</span><h3>Tool boundaries</h3><p>Which systems must be accessed, and through which typed operations?</p></article>
+            <article><span>05</span><h3>Independent parallelism</h3><p>Can workstreams run independently without sharing mutable state?</p></article>
+            <article><span>06</span><h3>External trust boundary</h3><p>Are separately operated agents or organizations exchanging tasks?</p></article>
+            <article><span>07</span><h3>Risk & reversibility</h3><p>Could actions change production, expose data, spend money, or affect people?</p></article>
+            <article><span>08</span><h3>Evidence burden</h3><p>Must claims be cited, evaluated, independently challenged, or audited?</p></article>
+            <article><span>09</span><h3>Knowledge requirement</h3><p>Does the system need documents, policies, history, or freshness-aware retrieval?</p></article>
+          </div>
+          <div class="decision-equation"><span>Agency benefit</span><b>must exceed</b><span>coordination + context + evaluation + failure cost</span></div>
+        </section>
+
+        <section class="slide" id="slide-9" data-slide="9" data-title="Temporary subagents" aria-labelledby="slide-9-title" hidden>
+          <div class="slide-number" aria-hidden="true">09</div>
+          <header class="slide-heading"><span class="chapter">Temporary intelligence</span><h2 id="slide-9-title">Temporary subagents are bounded workers—not permanent personalities</h2><p>Spawn intelligence only when an independent task benefits from parallelism, specialization, or independent verification.</p></header>
+          <div class="worker-flow"><article><span>1</span><h3>Decompose</h3><p>Identify an independent, testable subtask.</p></article><b>→</b><article><span>2</span><h3>Compile context</h3><p>Send only task-specific evidence and policies.</p></article><b>→</b><article><span>3</span><h3>Grant least privilege</h3><p>Expose only required tools and permissions.</p></article><b>→</b><article><span>4</span><h3>Execute with limits</h3><p>Apply timeout, call, depth, and budget caps.</p></article><b>→</b><article><span>5</span><h3>Validate artifact</h3><p>Reject malformed or unsupported output.</p></article><b>→</b><article><span>6</span><h3>Dispose worker</h3><p>Keep the artifact and trace, not the agent.</p></article></div>
+          <div class="two-column">
+            <article class="panel"><h3>Example worker contract</h3><dl class="contract-list"><div><dt>Role</dt><dd>Architecture critic</dd></div><div><dt>Context</dt><dd>Requirement, proposed topology, permissions, protocol decisions</dd></div><div><dt>Tools</dt><dd>None in the first bounded slice</dd></div><div><dt>Calls</dt><dd>1</dd></div><div><dt>Timeout</dt><dd>20 seconds</dd></div><div><dt>Child spawning</dt><dd>Denied</dd></div><div><dt>Return</dt><dd>Structured review artifact</dd></div></dl></article>
+            <article class="panel"><h3>When not to spawn</h3><ul><li>The task is sequential and small.</li><li>The workers would need constant shared mutable state.</li><li>The result cannot be validated independently.</li><li>The extra latency or cost exceeds the expected quality gain.</li><li>The “specialists” are only decorative personas.</li></ul></article>
+          </div>
+          <div class="principle-banner"><span>✦</span><strong>Permanent architecture, temporary intelligence.</strong> Retain validated artifacts and dispose of worker state.</div>
+        </section>
+
+        <section class="slide" id="slide-10" data-slide="10" data-title="Tools, MCP, retrieval, and A2A" aria-labelledby="slide-10-title" hidden>
+          <div class="slide-number" aria-hidden="true">10</div>
+          <header class="slide-heading"><span class="chapter">Integration concepts</span><h2 id="slide-10-title">Tools, MCP, retrieval, and A2A are not the same thing</h2><p>Choose each one for a different responsibility.</p></header>
+          <div class="concept-columns">
+            <article><span class="concept-icon">&lt;/&gt;</span><h3>Native typed functions</h3><dl><div><dt>What it is</dt><dd>Direct code hooks with strict input and output schemas.</dd></div><div><dt>Use it when</dt><dd>You need a small known capability inside your own system.</dd></div><div><dt>Example</dt><dd>Create a ticket, look up a user, run a calculation.</dd></div></dl></article>
+            <article><span class="concept-icon">⌘</span><h3>MCP</h3><dl><div><dt>What it is</dt><dd>A standard protocol for model-to-tool and model-to-context access through servers.</dd></div><div><dt>Use it when</dt><dd>Capabilities must be reusable, permissioned, discoverable, or standardized.</dd></div><div><dt>Example</dt><dd>Connect shared data, documents, and app tools through one interface.</dd></div></dl></article>
+            <article><span class="concept-icon">◉</span><h3>Retrieval</h3><dl><div><dt>What it is</dt><dd>A service that selects documents or knowledge to ground reasoning.</dd></div><div><dt>Use it when</dt><dd>The task depends on policies, manuals, history, or trusted sources.</dd></div><div><dt>Example</dt><dd>Bring support documents or policy pages into context.</dd></div></dl></article>
+            <article><span class="concept-icon">◎</span><h3>A2A</h3><dl><div><dt>What it is</dt><dd>Task and artifact exchange between separately operated agents.</dd></div><div><dt>Use it when</dt><dd>There is a real independent-agent boundary across systems or organizations.</dd></div><div><dt>Example</dt><dd>Your orchestrator sends a task to a partner-operated agent service.</dd></div></dl></article>
+          </div>
+          <div class="principle-banner"><span>✦</span><strong>Common pattern:</strong> typed functions first → MCP when reusable → retrieval when knowledge is external → A2A only for real cross-agent boundaries.</div>
+        </section>
+
+        <section class="slide" id="slide-11" data-slide="11" data-title="System architecture" aria-labelledby="slide-11-title" hidden>
+          <div class="slide-number" aria-hidden="true">11</div>
+          <header class="slide-heading"><span class="chapter">Platform architecture</span><h2 id="slide-11-title">Browser-first, provider-neutral, integration-optional</h2><p>The product remains usable without a model account or backend, while optional execution services stay behind explicit boundaries.</p></header>
+          <div class="architecture-columns">
+            <article class="architecture-column"><header><span>1</span><h3>Browser application</h3></header><div><b>UI / workspace</b><p>Plan, explore, compare, save, and restore.</p></div><div><b>Requirement intelligence</b><p>Evidence-backed coverage and contradiction analysis.</p></div><div><b>Architecture guidance</b><p>Topology, protocols, permissions, and stages.</p></div><div><b>Result contract & versions</b><p>Typed artifacts, trace, evaluation, local persistence.</p></div><div><b>Local deterministic critic</b><p>One bounded review with zero provider network calls.</p></div></article>
+            <article class="architecture-column"><header><span>2</span><h3>Optional server-side gateway</h3></header><div><b>Gateway API</b><p>Routes requests, enforces origin and body policy.</p></div><div><b>Deterministic provider</b><p>Contract-safe analysis without a model.</p></div><div><b>Ollama provider</b><p>Self-hosted local model guidance.</p></div><div><b>Free-only OpenRouter</b><p>Server-side free routes with no key in the browser.</p></div><div class="security-callout"><b>Credentials stay here</b><p>Provider secrets never enter the static client.</p></div></article>
+            <article class="architecture-column"><header><span>3</span><h3>Optional integrations</h3></header><div><b>Typed functions</b><p>Narrow validated operations.</p></div><div><b>MCP servers</b><p>Reusable permission-aware tool and resource access.</p></div><div><b>Retrieval service</b><p>Fresh, sourced domain context.</p></div><div><b>A2A peers</b><p>Only when external agent trust boundaries exist.</p></div><div><b>Execution workers</b><p>Sandboxed, budgeted, and registered separately.</p></div></article>
+          </div>
+          <div class="principle-banner"><span>✦</span><strong>Keep control logic explicit,</strong> boundaries visible, and optional components truly optional.</div>
+        </section>
+
+        <section class="slide" id="slide-12" data-slide="12" data-title="Context and artifact flow" aria-labelledby="slide-12-title" hidden>
+          <div class="slide-number" aria-hidden="true">12</div>
+          <header class="slide-heading"><span class="chapter">Information architecture</span><h2 id="slide-12-title">Context is compiled; knowledge is retained as artifacts</h2><p>Do not send the entire project to every model or worker. Assemble minimum context per task and preserve durable evidence outside conversations.</p></header>
+          <div class="context-flow">
+            <article><span>Source context</span><h3>Requirement, policies, approved data references, prior artifacts</h3></article><b>→</b><article><span>Context compiler</span><h3>Whitelist fields, remove secrets, enforce byte limits, attach policy</h3></article><b>→</b><article><span>Task envelope</span><h3>Role, objective, inputs, tools, permissions, timeout, return schema</h3></article><b>→</b><article><span>Validated artifact</span><h3>Claims, evidence, uncertainty, status, lineage, trace references</h3></article>
+          </div>
+          <div class="two-column">
+            <article class="panel"><h3>What survives</h3><ul><li>Requirement assessment</li><li>Architecture decision</li><li>Harness specification</li><li>Worker results</li><li>Critic findings</li><li>Trace bundle</li><li>Evaluation summary</li></ul></article>
+            <article class="panel"><h3>What should not survive by default</h3><ul><li>Raw provider credentials</li><li>Unbounded chain-of-thought</li><li>Temporary worker memory</li><li>Irrelevant project history</li><li>Unvalidated model prose</li><li>Hidden tool handles</li><li>Production action tokens</li></ul></article>
+          </div>
+          <div class="principle-banner"><span>✦</span><strong>Context isolation:</strong> every worker receives only what it needs, while durable decisions live in typed artifacts.</div>
+        </section>
+
+        <section class="slide" id="slide-13" data-slide="13" data-title="Safety and permissions" aria-labelledby="slide-13-title" hidden>
+          <div class="slide-number" aria-hidden="true">13</div>
+          <header class="slide-heading"><span class="chapter">Governance</span><h2 id="slide-13-title">Autonomy is granted capability by capability</h2><p>“Autonomous” is not one switch. Each action gets an explicit allow, allowlist, approval, or deny policy.</p></header>
+          <div class="permission-table" role="table" aria-label="Example harness permission matrix">
+            <div class="permission-row permission-head" role="row"><span>Capability</span><span>Policy</span><span>Enforcement</span></div>
+            <div class="permission-row" role="row"><b>Read submitted requirement</b><span class="policy allow">Allow</span><p>Always available to the current run.</p></div>
+            <div class="permission-row" role="row"><b>Read approved context sources</b><span class="policy scoped">Allowlist</span><p>Source-by-source grant with trace event.</p></div>
+            <div class="permission-row" role="row"><b>Spawn temporary workers</b><span class="policy scoped">Bounded</span><p>Maximum count, depth one, timeout, no child spawning.</p></div>
+            <div class="permission-row" role="row"><b>Write or modify external systems</b><span class="policy approval">Human approval</span><p>Separate short-lived action token after named approval.</p></div>
+            <div class="permission-row" role="row"><b>Production deletion or deployment</b><span class="policy deny">Deny</span><p>Tool is not exposed in the planning harness.</p></div>
+            <div class="permission-row" role="row"><b>Paid model usage</b><span class="policy deny">Deny</span><p>Local or explicitly free route until authorized.</p></div>
+          </div>
+          <div class="safety-grid"><article><span>1</span><h3>Least privilege</h3><p>Expose the smallest capability set.</p></article><article><span>2</span><h3>Separate reasoning from action</h3><p>A plan cannot authorize itself.</p></article><article><span>3</span><h3>Make risky actions reversible</h3><p>Preview, approve, execute, verify.</p></article><article><span>4</span><h3>Record evidence</h3><p>Every permission and action has traceable rationale.</p></article></div>
+        </section>
+
+        <section class="slide" id="slide-14" data-slide="14" data-title="Evaluation and evidence" aria-labelledby="slide-14-title" hidden>
+          <div class="slide-number" aria-hidden="true">14</div>
+          <header class="slide-heading"><span class="chapter">Reliability</span><h2 id="slide-14-title">A harness is trustworthy only when it can be evaluated</h2><p>Measure requirement quality, architecture fit, safety, execution efficiency, evidence quality, and regressions—not only whether an answer looks fluent.</p></header>
+          <div class="evaluation-layout">
+            <div class="evaluation-score"><div class="score-ring"><strong>89</strong><span>/100</span></div><h3>Strong draft harness</h3><p>Ready for implementation planning after two targeted requirement questions.</p></div>
+            <div class="metric-bars"><article><span>Requirement completeness</span><div><i style="width:82%"></i></div><b>82</b></article><article><span>Architecture fit</span><div><i style="width:91%"></i></div><b>91</b></article><article><span>Safety boundary coverage</span><div><i style="width:96%"></i></div><b>96</b></article><article><span>Execution efficiency</span><div><i style="width:84%"></i></div><b>84</b></article><article><span>Traceability</span><div><i style="width:98%"></i></div><b>98</b></article></div>
+          </div>
+          <div class="evidence-chain"><article><span>Requirement evidence</span><p>What the user explicitly said</p></article><b>→</b><article><span>Decision evidence</span><p>Why this topology and these protocols</p></article><b>→</b><article><span>Execution evidence</span><p>What ran, failed, timed out, or was denied</p></article><b>→</b><article><span>Evaluation evidence</span><p>Which criteria passed and what remains uncertain</p></article></div>
+          <div class="principle-banner"><span>✦</span><strong>Version every result:</strong> compare architectures and evaluations over time instead of losing decisions in chat history.</div>
+        </section>
+
+        <section class="slide" id="slide-15" data-slide="15" data-title="End-user workflow" aria-labelledby="slide-15-title" hidden>
+          <div class="slide-number" aria-hidden="true">15</div>
+          <header class="slide-heading"><span class="chapter">End-user playbook</span><h2 id="slide-15-title">How to use HarnessLab step by step</h2><p>A guided journey from a rough idea to a usable, versioned harness plan.</p></header>
+          <div class="user-steps">
+            <article><span>1</span><h3>Describe the use case</h3><p>Write the real problem and desired outcome in plain English.</p><small>Good: “Investigate approved KPI data and return a cited root-cause report.”</small></article>
+            <article><span>2</span><h3>Add context</h3><p>Name users, inputs, outputs, tools, restrictions, and success criteria.</p><small>Avoid naming systems that are not truly required.</small></article>
+            <article><span>3</span><h3>Check readiness</h3><p>Review what is covered, partial, missing, or contradictory.</p><small>Use the copied question list as your interview checklist.</small></article>
+            <article><span>4</span><h3>Resolve contradictions</h3><p>Clarify autonomy, approval, data access, retention, and external access.</p><small>Aim for zero high-severity contradictions.</small></article>
+            <article><span>5</span><h3>Review architecture</h3><p>Understand why software, workflow, agent, subagents, or A2A was selected.</p><small>Prefer the simpler viable option.</small></article>
+            <article><span>6</span><h3>Inspect protocols & controls</h3><p>Review tools, MCP, retrieval, A2A, permissions, and denied actions.</p><small>Confirm every write is explicit and approval-gated.</small></article>
+            <article><span>7</span><h3>Run the critic</h3><p>Get a second-pass review of architecture, evidence, and boundaries.</p><small>Accepted and rejected findings remain traceable.</small></article>
+            <article><span>8</span><h3>Save and implement</h3><p>Store the versioned result and move into engineering.</p><small>The saved contract becomes the implementation baseline.</small></article>
+          </div>
+          <div class="principle-banner"><span>✦</span><strong>User goal:</strong> make the decision process explicit before coding or connecting production systems.</div>
+        </section>
+
+        <section class="slide" id="slide-16" data-slide="16" data-title="Developer workflow" aria-labelledby="slide-16-title" hidden>
+          <div class="slide-number" aria-hidden="true">16</div>
+          <header class="slide-heading"><span class="chapter">Developer playbook</span><h2 id="slide-16-title">Turn guidance into an implementation-ready build</h2><p>Translate the retained decisions into layers, interfaces, policies, tests, and deployment seams.</p></header>
+          <div class="developer-layout">
+            <div class="layer-stack">
+              <article><span>1</span><div><h3>Requirement specification</h3><p>Use case, users, inputs, outputs, constraints, approvals, success criteria.</p></div></article>
+              <article><span>2</span><div><h3>Decision layer</h3><p>Requirement intelligence, topology decision, protocol guidance, alternatives.</p></div></article>
+              <article><span>3</span><div><h3>Control layer</h3><p>Typed contracts, policies, budgets, timeouts, state, action tokens, trace events.</p></div></article>
+              <article><span>4</span><div><h3>Execution layer</h3><p>Deterministic logic first; bounded agent loops only when justified.</p></div></article>
+              <article><span>5</span><div><h3>Integration layer</h3><p>Typed functions, MCP servers, retrieval, optional A2A, credential isolation.</p></div></article>
+              <article><span>6</span><div><h3>Evaluation layer</h3><p>Fixtures, critic review, failure injection, regression tests, quality and safety metrics.</p></div></article>
+            </div>
+            <aside class="rules-panel"><h3>Build principles</h3><ul><li>Start with the simplest architecture that fits.</li><li>Keep inputs and outputs typed.</li><li>Use local deterministic defaults first.</li><li>Keep provider credentials server-side only.</li><li>Validate every artifact at every seam.</li><li>Preserve traceability for decisions and outputs.</li><li>Test denied actions and failure modes.</li><li>Deploy one complete slice before expanding.</li></ul></aside>
+          </div>
+          <div class="technical-note"><strong>Technical note:</strong> HarnessLab helps design the harness; it does not replace engineering discipline, threat modeling, or production validation.</div>
+        </section>
+
+        <section class="slide" id="slide-17" data-slide="17" data-title="Worked example" aria-labelledby="slide-17-title" hidden>
+          <div class="slide-number" aria-hidden="true">17</div>
+          <header class="slide-heading"><span class="chapter">Worked example</span><h2 id="slide-17-title">Telecom KPI anomaly investigation</h2><p>See how one vague request becomes a bounded multi-stage harness design.</p></header>
+          <div class="example-layout">
+            <article class="example-requirement"><span>Original idea</span><blockquote>“Build an agent that finds why a KPI dropped.”</blockquote><h3>After requirement guidance</h3><p>Investigate approved telecom KPI data from a read-only warehouse, validate freshness and completeness, compare independent dimensions in parallel, and return a cited root-cause report for operations leaders. Never modify production data. Escalate when evidence confidence is below 0.75. Complete within 60 seconds and retain the analysis trace.</p></article>
+            <article class="example-architecture"><h3>Recommended harness</h3><div class="example-flow"><span>Requirement gate</span><b>→</b><span>Data quality check</span><b>→</b><span>Parallel dimension analysis</span><b>→</b><span>Evidence judge</span><b>→</b><span>Root-cause report</span></div><div class="worker-cards"><div><span>Worker 1</span><b>Data Quality Analyst</b><small>Freshness, completeness, metric definitions</small></div><div><span>Worker 2</span><b>Diagnostic Investigator</b><small>Segments, drivers, measured contribution</small></div><div><span>Worker 3</span><b>Independent Evidence Critic</b><small>Unsupported claims and alternate explanations</small></div></div></article>
+          </div>
+          <div class="example-decisions"><article><span>Topology</span><b>Orchestrator + temporary specialists</b><p>Independent dimensions justify bounded parallelism.</p></article><article><span>Tools</span><b>Read-only typed query interface / MCP-ready</b><p>No write capability exposed.</p></article><article><span>A2A</span><b>Not needed</b><p>Workers are internal to one orchestrator.</p></article><article><span>Approval</span><b>Only for external notification</b><p>Analysis itself remains read-only.</p></article><article><span>Artifacts</span><b>Data profile, driver ranking, evidence map, report</b><p>Every claim references measured evidence.</p></article></div>
+        </section>
+
+        <section class="slide" id="slide-18" data-slide="18" data-title="Quick start and current scope" aria-labelledby="slide-18-title" hidden>
+          <div class="slide-number" aria-hidden="true">18</div>
+          <header class="slide-heading"><span class="chapter">Start now</span><h2 id="slide-18-title">Use HarnessLab to make the plan explicit before coding</h2><p>The current product supports a complete local planning path, with clear labels around what is not yet live execution.</p></header>
+          <div class="final-layout">
+            <article class="quick-start"><h3>Six-step quick start</h3><ol><li><span>1</span><p>Write one clear paragraph about the use case.</p></li><li><span>2</span><p>Add users, data, outputs, tools, restrictions, and success criteria.</p></li><li><span>3</span><p>Resolve missing areas and contradictions.</p></li><li><span>4</span><p>Accept the simplest viable architecture.</p></li><li><span>5</span><p>Review protocols, permissions, evaluation, and critic findings.</p></li><li><span>6</span><p>Save the version and begin implementation from the retained contract.</p></li></ol></article>
+            <article class="current-scope"><h3>Current live scope</h3><div class="scope-status"><div><span class="status-dot green"></span><b>Available now</b><p>Requirement readiness, deterministic planning, permissions, protocols, artifacts, trace, versioning, and a browser-local critic.</p></div><div><span class="status-dot blue"></span><b>Optional locally</b><p>Gateway analysis with deterministic provider, Ollama, or free-only OpenRouter configuration.</p></div><div><span class="status-dot amber"></span><b>Planned next</b><p>More topology intelligence, execution workers, MCP invocation, broader evaluations, authenticated persistence, and production hardening.</p></div><div><span class="status-dot red"></span><b>Not implied</b><p>No automatic production writes, no unbounded swarm, no hidden credentials, and no claim that a visual plan equals live execution.</p></div></div></article>
+          </div>
+          <div class="final-cta"><div><span>Ready to apply the guide?</span><h3>Open the builder and describe your real use case.</h3><p>Start with browser-deterministic mode. Add providers or integrations only when the requirement proves they are necessary.</p></div><a href="../">Open HarnessLab builder <b>→</b></a></div>
+          <div class="principle-banner"><span>✦</span><strong>Outcome:</strong> a safer, explainable, testable AI plan—before implementation begins.</div>
+        </section>
+      </main>
+    </div>
+
+    <footer class="guide-controls" aria-label="Slide navigation">
+      <button type="button" id="previousButton" class="nav-control"><span aria-hidden="true">←</span><b>Previous</b></button>
+      <div class="progress-group"><span id="slideCounter">01 / 18</span><div class="progress-track" aria-hidden="true"><i id="progressBar"></i></div><span id="progressLabel">6% complete</span></div>
+      <button type="button" id="nextButton" class="nav-control"><b>Next</b><span aria-hidden="true">→</span></button>
+    </footer>
+  </div>
+
+  <section id="overviewPanel" class="overview-panel" data-open="false" aria-hidden="true">
+    <div class="overview-backdrop" data-close-overview></div>
+    <div class="overview-dialog" role="dialog" aria-modal="true" aria-labelledby="overviewTitle" tabindex="-1">
+      <header><div><span>HarnessLab guide</span><h2 id="overviewTitle">Choose a chapter</h2></div><button type="button" id="overviewClose" aria-label="Close slide overview">×</button></header>
+      <div id="overviewGrid" class="overview-grid"></div>
+      <footer><span>Keyboard: <kbd>←</kbd><kbd>→</kbd> navigate · <kbd>O</kbd> overview · <kbd>F</kbd> fullscreen · <kbd>Esc</kbd> close</span></footer>
+    </div>
+  </section>
+
+  <script type="module" src="./guide.js"></script>
+</body>
+</html>
