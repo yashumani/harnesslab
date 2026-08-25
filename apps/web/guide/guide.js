@@ -113,6 +113,7 @@ function updateNavigationState() {
 function goTo(index, { focusDeck = false, updateHash = true } = {}) {
   currentIndex = clampIndex(index);
   updateNavigationState();
+  globalThis.scrollTo(0, 0);
 
   if (updateHash) {
     const hash = `#slide-${currentIndex + 1}`;
