@@ -7,6 +7,7 @@ on:
       - 'apps/web/learn-hub.js'
       - 'apps/web/learn-hub.css'
       - 'apps/web/guide/**'
+      - 'scripts/capture-learning-guide-viewport.mjs'
       - 'scripts/validate-learning-guide.mjs'
       - 'tests/learning-guide-contract.test.mjs'
       - 'package.json'
@@ -19,6 +20,7 @@ on:
       - 'apps/web/learn-hub.js'
       - 'apps/web/learn-hub.css'
       - 'apps/web/guide/**'
+      - 'scripts/capture-learning-guide-viewport.mjs'
       - 'scripts/validate-learning-guide.mjs'
       - 'tests/learning-guide-contract.test.mjs'
       - 'package.json'
@@ -79,11 +81,14 @@ jobs:
           grep -q 'id="slide-18"' /tmp/harnesslab-guide.html
           grep -q 'HarnessLabLearnHub' /tmp/learn-hub.js
           grep -q "event.key === 'ArrowRight'" /tmp/guide.js
+          grep -q 'globalThis.scrollTo(0, 0)' /tmp/guide.js
           grep -q '@media (max-width: 760px)' /tmp/guide.css
           grep -q '@media print' /tmp/guide.css
 
-      - name: Render desktop and phone guide evidence
+      - name: Audit exact desktop and phone guide viewports
         shell: bash
+        env:
+          CHROME_DEBUG_PORT: '9226'
         run: |
           set -euo pipefail
           mkdir -p learning-guide-evidence
@@ -93,18 +98,39 @@ jobs:
             exit 1
           fi
 
-          "${browser}" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
-            --hide-scrollbars --virtual-time-budget=2500 --window-size=1440,900 \
-            --screenshot=learning-guide-evidence/desktop.png \
-            'http://127.0.0.1:4175/guide/#slide-1'
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=9226 \
+            --user-data-dir=/tmp/harnesslab-learning-guide-chrome \
+            about:blank > /tmp/harnesslab-learning-guide-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${browser_pid}" 2>/dev/null || true' EXIT
 
-          "${browser}" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
-            --hide-scrollbars --virtual-time-budget=2500 --window-size=390,844 \
-            --screenshot=learning-guide-evidence/phone.png \
-            'http://127.0.0.1:4175/guide/#slide-15'
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:9226/json/version > /dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          node scripts/capture-learning-guide-viewport.mjs \
+            desktop 1440 900 \
+            'http://127.0.0.1:4175/guide/#slide-1' \
+            learning-guide-evidence
+
+          node scripts/capture-learning-guide-viewport.mjs \
+            phone 390 844 \
+            'http://127.0.0.1:4175/guide/#slide-15' \
+            learning-guide-evidence
 
           test -s learning-guide-evidence/desktop.png
+          test -s learning-guide-evidence/desktop.json
           test -s learning-guide-evidence/phone.png
+          test -s learning-guide-evidence/phone.json
 
       - name: Upload responsive guide evidence
         uses: actions/upload-artifact@v4
@@ -124,6 +150,7 @@ jobs:
             echo '- End-user and developer learning paths: validated'
             echo '- Keyboard, touch, overview, fullscreen, and print: validated'
             echo '- Modal focus and inert-background lifecycle: validated'
-            echo '- Desktop and phone render evidence: retained'
+            echo '- Exact 1440×900 and 390×844 viewport audits: passed'
+            echo '- Document offset, horizontal overflow, clipped controls, and console errors: zero'
             echo '- Provider credentials and runtime network calls: absent'
           } >> "$GITHUB_STEP_SUMMARY"
