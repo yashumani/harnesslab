@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#F7F8FC">
-  <meta name="description" content="HarnessLab is a deploy-first AI agent harness builder with evidence-backed requirement readiness, one bounded executable temporary critic, provider-neutral analysis, and policy controls.">
+  <meta name="description" content="HarnessLab is a deploy-first AI agent harness builder with evidence-backed requirement readiness, a bounded critic, provider-neutral analysis, policy controls, and an interactive architecture guide.">
   <meta name="color-scheme" content="light">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:* https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
   <title>HarnessLab — AI Agent Harness Builder</title>
@@ -30,6 +30,7 @@
   <noscript>
     <div class="noscript-card">HarnessLab requires JavaScript to render the agent harness workspace.</div>
   </noscript>
+  <harnesslab-learn-hub></harnesslab-learn-hub>
 
   <!-- Pinned browser runtimes: no bundler, compiler, package install, or generated build output. -->
   <script crossorigin="anonymous" src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
@@ -39,5 +40,6 @@
   <script type="module" src="./requirement-intelligence-panel.js"></script>
   <script type="module" src="./critic-console.js"></script>
   <script type="module" src="./app.js"></script>
+  <script type="module" src="./learn-hub.js"></script>
 </body>
 </html>
