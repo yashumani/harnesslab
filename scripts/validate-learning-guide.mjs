@@ -6,18 +6,34 @@ const requiredFiles = [
   'apps/web/learn-hub.css',
   'apps/web/guide/index.html',
   'apps/web/guide/guide.css',
-  'apps/web/guide/guide.js'
+  'apps/web/guide/guide.js',
+  'scripts/capture-learning-guide-viewport.mjs',
+  '.github/workflows/learning-guide-integration.yml',
+  '.github/workflows/verify-learning-guide-pages.yml'
 ];
 
 for (const path of requiredFiles) await access(path, constants.R_OK);
 
-const [mainHtml, hubJs, hubCss, guideHtml, guideCss, guideJs] = await Promise.all([
+const [
+  mainHtml,
+  hubJs,
+  hubCss,
+  guideHtml,
+  guideCss,
+  guideJs,
+  captureViewport,
+  integrationWorkflow,
+  liveWorkflow
+] = await Promise.all([
   readFile('apps/web/index.html', 'utf8'),
   readFile('apps/web/learn-hub.js', 'utf8'),
   readFile('apps/web/learn-hub.css', 'utf8'),
   readFile('apps/web/guide/index.html', 'utf8'),
   readFile('apps/web/guide/guide.css', 'utf8'),
-  readFile('apps/web/guide/guide.js', 'utf8')
+  readFile('apps/web/guide/guide.js', 'utf8'),
+  readFile('scripts/capture-learning-guide-viewport.mjs', 'utf8'),
+  readFile('.github/workflows/learning-guide-integration.yml', 'utf8'),
+  readFile('.github/workflows/verify-learning-guide-pages.yml', 'utf8')
 ]);
 
 const slideMatches = [...guideHtml.matchAll(/<section class="slide(?: [^"]*)?" id="slide-(\d+)" data-slide="(\d+)" data-title="([^"]+)"/g)];
@@ -60,7 +76,8 @@ const checks = [
   [guideJs.includes("location.hash.match(/^#slide-"), 'guide must support deep-link hashes'],
   [guideJs.includes("addEventListener('touchstart'") && guideJs.includes("addEventListener('touchend'"), 'guide must support touch swipes'],
   [guideJs.includes('requestFullscreen') && guideJs.includes('window.print()'), 'guide must support fullscreen and print'],
-  [guideJs.includes('shell.setAttribute(\'inert\'') && guideJs.includes('shell.removeAttribute(\'inert\'') , 'overview must isolate background content'],
+  [guideJs.includes("globalThis.scrollTo(0, 0)"), 'guide must reset document position when a slide or deep link is selected'],
+  [guideJs.includes("shell.setAttribute('inert'") && guideJs.includes("shell.removeAttribute('inert'"), 'overview must isolate background content'],
   [guideJs.includes("event.key === 'Escape'") && guideJs.includes("event.key === 'Tab'"), 'overview must support Escape and focus trapping'],
   [!guideJs.includes('fetch(') && !guideJs.includes('XMLHttpRequest') && !guideJs.includes('WebSocket'), 'guide runtime must remain network-free'],
 
@@ -69,7 +86,16 @@ const checks = [
   [guideCss.includes('@media (max-width: 1024px)') && guideCss.includes('@media (max-width: 760px)') && guideCss.includes('@media (max-width: 430px)'), 'guide must include desktop, tablet, and phone compositions'],
   [guideCss.includes('@media print') && guideCss.includes('@page { size: landscape'), 'guide must support printable presentation pages'],
   [guideCss.includes('prefers-reduced-motion'), 'guide must respect reduced motion'],
-  [!guideCss.match(/url\s*\(\s*["']?https?:/i), 'guide CSS must not load remote artwork']
+  [!guideCss.match(/url\s*\(\s*["']?https?:/i), 'guide CSS must not load remote artwork'],
+
+  [captureViewport.includes('Emulation.setDeviceMetricsOverride'), 'guide viewport QA must emulate exact CSS dimensions through Chrome DevTools'],
+  [captureViewport.includes('Page.captureScreenshot'), 'guide viewport QA must retain browser screenshots'],
+  [captureViewport.includes('pageOverflowX') && captureViewport.includes('clippedInteractive'), 'guide viewport QA must reject horizontal overflow and clipped controls'],
+  [captureViewport.includes('bodyScroll.x') && captureViewport.includes('topbarRect'), 'guide viewport QA must validate document position and top-bar alignment'],
+  [captureViewport.includes('consoleMessages') && captureViewport.includes("type === 'error'"), 'guide viewport QA must reject browser console failures'],
+  [integrationWorkflow.includes('capture-learning-guide-viewport.mjs') && integrationWorkflow.includes('desktop 1440 900') && integrationWorkflow.includes('phone 390 844'), 'pull-request CI must run exact desktop and phone guide audits'],
+  [liveWorkflow.includes('capture-learning-guide-viewport.mjs') && liveWorkflow.includes('desktop 1440 900') && liveWorkflow.includes('phone 390 844'), 'post-deployment CI must run exact public desktop and phone guide audits'],
+  [!integrationWorkflow.includes('--window-size=') && !liveWorkflow.includes('--window-size='), 'guide workflows must not substitute browser window size for exact CSS viewport emulation']
 ];
 
 for (const [condition, message] of checks) {
@@ -81,7 +107,8 @@ for (const [name, content] of [
   ['learning hub CSS', hubCss],
   ['guide HTML', guideHtml],
   ['guide JavaScript', guideJs],
-  ['guide CSS', guideCss]
+  ['guide CSS', guideCss],
+  ['guide viewport audit', captureViewport]
 ]) {
   if (/OPENROUTER_API_KEY|OLLAMA_DEFAULT_MODEL|authorization\s*:/i.test(content)) {
     throw new Error(`${name} must not contain provider credentials or authorization handling`);
@@ -91,4 +118,4 @@ for (const [name, content] of [
   }
 }
 
-console.log('Validated the 18-slide dark learning guide, in-product learning hub, responsive layouts, accessibility, and credential-free deployment contract.');
+console.log('Validated the 18-slide dark learning guide, in-product learning hub, exact responsive browser audits, accessibility, and credential-free deployment contract.');
