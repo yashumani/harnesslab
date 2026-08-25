@@ -1,7 +1,7 @@
 {
   "name": "HarnessLab",
   "short_name": "HarnessLab",
-  "description": "Deploy-first AI agent harness builder.",
+  "description": "Deploy-first AI agent harness builder with an interactive architecture guide.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#F7F8FC",
@@ -12,6 +12,21 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open the HarnessLab guide",
+      "short_name": "Guide",
+      "description": "Learn HarnessLab from end-user and developer perspectives.",
+      "url": "./guide/",
+      "icons": [
+        {
+          "src": "./favicon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
     }
   ]
 }
