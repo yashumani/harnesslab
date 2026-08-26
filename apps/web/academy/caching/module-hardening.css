@@ -3,9 +3,7 @@
 html,
 body,
 .module-shell,
-.module-topbar,
-.module-sidebar,
-.module-content {
+.module-topbar {
   width: 100%;
   max-width: 100%;
 }
@@ -78,6 +76,13 @@ body,
 .technical-note code,
 .version-list code {
   max-width: 100%;
+}
+
+@media (max-width: 1024px) {
+  .module-sidebar {
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 760px) {
