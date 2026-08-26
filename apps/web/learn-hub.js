@@ -111,7 +111,7 @@ class HarnessLabLearnHub extends HTMLElement {
       <link rel="stylesheet" href="${STYLESHEET_URL}">
       <button class="learn-launcher" data-action="open" type="button" aria-expanded="${this.open}" aria-controls="harnesslab-learn-panel">
         <span class="launcher-icon" aria-hidden="true">?</span>
-        <span><strong>Learn HarnessLab</strong><small>Academy modules + architecture guide</small></span>
+        <span><strong>Learn HarnessLab</strong><small>Interactive architecture guide + Academy modules</small></span>
         <i aria-hidden="true">New</i>
       </button>
 
