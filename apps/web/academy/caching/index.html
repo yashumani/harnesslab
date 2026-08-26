@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en" data-module-theme="midnight">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050913">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="HarnessLab Academy Module 1: chat caching, prompt caching, KV caching, response caching, tool caching, invalidation, metrics, and production architecture.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
+  <title>Module 1 — Chat, Prompt, and KV Caching | HarnessLab Academy</title>
+  <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./module.css">
+</head>
+<body>
+  <a class="skip-link" href="#module-content">Skip to module content</a>
+
+  <div class="module-shell">
+    <header class="module-topbar">
+      <a class="academy-brand" href="../../" aria-label="Return to HarnessLab builder">
+        <span class="academy-mark" aria-hidden="true">H</span>
+        <span><strong>HarnessLab</strong><small>Academy</small></span>
+      </a>
+      <div class="module-title-block">
+        <span>Module 1 · Agent systems foundations</span>
+        <strong>Chat, prompt, and KV caching</strong>
+      </div>
+      <div class="topbar-actions">
+        <button type="button" class="icon-button" id="themeButton" aria-pressed="false" aria-label="Toggle module contrast">◐</button>
+        <a class="topbar-link" href="../../guide/">Architecture guide</a>
+        <a class="topbar-link primary" href="../../">Open builder</a>
+      </div>
+    </header>
+
+    <aside class="module-sidebar" aria-label="Module chapters">
+      <div class="sidebar-intro">
+        <span class="module-number">01</span>
+        <div><strong>Caching foundations</strong><small>16 chapters · labs · knowledge check</small></div>
+      </div>
+      <div class="progress-card" aria-label="Module progress">
+        <div><span>Progress</span><strong id="progressLabel">0%</strong></div>
+        <div class="progress-track"><i id="progressBar"></i></div>
+        <small id="progressDetail">Start with the mental model.</small>
+      </div>
+      <nav class="chapter-nav" id="chapterNav">
+        <a href="#chapter-1" data-chapter-link="1"><span>01</span> Mental model</a>
+        <a href="#chapter-2" data-chapter-link="2"><span>02</span> Complete vocabulary</a>
+        <a href="#chapter-3" data-chapter-link="3"><span>03</span> KV cache mechanics</a>
+        <a href="#chapter-4" data-chapter-link="4"><span>04</span> Request vs prefix cache</a>
+        <a href="#chapter-5" data-chapter-link="5"><span>05</span> Prompt caching</a>
+        <a href="#chapter-6" data-chapter-link="6"><span>06</span> Prefix ordering</a>
+        <a href="#chapter-7" data-chapter-link="7"><span>07</span> Provider implementations</a>
+        <a href="#chapter-8" data-chapter-link="8"><span>08</span> OpenAI implementation</a>
+        <a href="#chapter-9" data-chapter-link="9"><span>09</span> Economics</a>
+        <a href="#chapter-10" data-chapter-link="10"><span>10</span> Exact response cache</a>
+        <a href="#chapter-11" data-chapter-link="11"><span>11</span> Semantic cache</a>
+        <a href="#chapter-12" data-chapter-link="12"><span>12</span> Conversation state</a>
+        <a href="#chapter-13" data-chapter-link="13"><span>13</span> Tool and RAG cache</a>
+        <a href="#chapter-14" data-chapter-link="14"><span>14</span> BI reference architecture</a>
+        <a href="#chapter-15" data-chapter-link="15"><span>15</span> Invalidation and metrics</a>
+        <a href="#chapter-16" data-chapter-link="16"><span>16</span> Experiments and quiz</a>
+      </nav>
+      <div class="sidebar-footer">
+        <span>Next module</span>
+        <strong>Context, conversation state, memory, and compaction</strong>
+      </div>
+    </aside>
+
+    <main id="module-content" class="module-content" tabindex="-1">
+      <section class="module-hero" aria-labelledby="module-title">
+        <div class="hero-copy">
+          <span class="eyebrow">HarnessLab Academy · Module 1</span>
+          <h1 id="module-title">Understand every kind of “chat cache” before you design one.</h1>
+          <p>“Chat caching” is an umbrella phrase. A production agent may use conversation persistence, response caching, prompt-prefix caching, runtime KV caching, and tool-result caching at the same time—but each solves a different problem.</p>
+          <div class="hero-actions">
+            <a class="primary-action" href="#chapter-1">Start the module <span aria-hidden="true">→</span></a>
+            <button class="secondary-action" id="resetProgressButton" type="button">Reset progress</button>
+          </div>
+          <div class="verification-note">
+            <span aria-hidden="true">✓</span>
+            <p><strong>Source and verification policy.</strong> The durable concepts and chapter structure follow the supplied Module 1. Provider-specific details were checked against official documentation on <time datetime="2026-08-26">August 26, 2026</time>. Where the supplied draft and current documentation differ, the difference is labeled explicitly.</p>
+          </div>
+        </div>
+        <div class="hero-map" aria-label="Caching layers in a production agent">
+          <div class="durable-store"><span>Durable conversation history</span><small>Postgres · MongoDB · persistent Redis</small></div>
+          <div class="pipeline" role="img" aria-label="User to response cache to prompt builder to prompt prefix cache to model runtime to answer">
+            <div class="pipeline-node"><span>User</span></div><i>→</i>
+            <div class="pipeline-node accent"><span>Response cache</span><small>May skip model</small></div><i>→</i>
+            <div class="pipeline-node"><span>Prompt builder</span><small>History + tools + data</small></div><i>→</i>
+            <div class="pipeline-node violet"><span>Prefix cache</span><small>Reuse prefill</small></div><i>→</i>
+            <div class="pipeline-node cyan"><span>Model runtime</span><small>KV cache</small></div><i>→</i>
+            <div class="pipeline-node success"><span>Answer</span></div>
+          </div>
+          <div class="cache-callouts">
+            <div><span>Tool/RAG cache</span><small>Queries and retrieval results</small></div>
+            <div><span>Per-request KV cache</span><small>Previous token tensors</small></div>
+            <div><span>Cross-request prefix cache</span><small>Reusable shared prefixes</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="learning-objectives" aria-label="Learning objectives">
+        <article><span>01</span><strong>Name the right mechanism</strong><p>Stop treating persistence, response reuse, prompt reuse, and GPU state as the same thing.</p></article>
+        <article><span>02</span><strong>Design cache-safe boundaries</strong><p>Include tenant, permissions, data versions, model settings, and freshness in every answer-affecting key.</p></article>
+        <article><span>03</span><strong>Measure actual value</strong><p>Track token hit rate, reads per write, latency, stale-answer rate, and false semantic hits.</p></article>
+      </section>
+
+      <section id="chapter-1" class="lesson-section" data-chapter="1" data-title="Mental model">
+        <header class="section-header"><span>Chapter 01</span><div><h2>The three corrections that prevent most caching mistakes</h2><p>Use these as the mental model for the entire module.</p></div></header>
+        <div class="correction-grid">
+          <article><span>1</span><h3>Prompt caching does not cache the answer.</h3><p>The provider reuses the model state for a matching prompt prefix, then processes the changing suffix and generates a fresh answer.</p></article>
+          <article><span>2</span><h3>KV caching is not a Redis-style database.</h3><p>The “keys” and “values” are attention tensors derived from model hidden states—not application records such as <code>customer:123</code>.</p></article>
+          <article><span>3</span><h3>Conversation history is persistence, not automatically caching.</h3><p>Messages, summaries, and memory must live in an authoritative store if the agent needs them tomorrow.</p></article>
+        </div>
+        <div class="decision-lab" data-lab="selector">
+          <div class="lab-heading"><span>Interactive lab</span><h3>Choose the mechanism from the need</h3></div>
+          <label for="needSelector">What are you trying to accomplish?</label>
+          <select id="needSelector">
+            <option value="memory">Remember the conversation tomorrow</option>
+            <option value="exact">Return the identical previous answer</option>
+            <option value="semantic">Reuse an answer for a paraphrased FAQ</option>
+            <option value="prompt">Generate a fresh answer from the same large instructions</option>
+            <option value="kv">Speed up token-by-token decoding</option>
+            <option value="prefix">Reuse model state across separate requests</option>
+            <option value="tool">Avoid repeating SQL, API, RAG, or MCP work</option>
+          </select>
+          <output id="needOutput" class="lab-output" aria-live="polite"></output>
+        </div>
+      </section>
+
+      <section id="chapter-2" class="lesson-section" data-chapter="2" data-title="Complete caching vocabulary">
+        <header class="section-header"><span>Chapter 02</span><div><h2>The complete caching vocabulary</h2><p>The first design question is not “Which cache?” It is “What exact work are we trying to reuse?”</p></div></header>
+        <div class="table-wrap" role="region" aria-label="Caching vocabulary table" tabindex="0">
+          <table>
+            <thead><tr><th>Mechanism</th><th>What it stores</th><th>What creates a hit?</th><th>Does the model run?</th><th>Primary purpose</th></tr></thead>
+            <tbody>
+              <tr><td>Conversation state</td><td>Messages, summaries, metadata</td><td>Session or thread ID</td><td>Yes</td><td>Give the model earlier context</td></tr>
+              <tr><td>Exact response cache</td><td>Previously generated final answer</td><td>All answer-affecting inputs match</td><td>No</td><td>Maximum cost and latency reduction</td></tr>
+              <tr><td>Semantic response cache</td><td>Prompt embedding plus answer</td><td>Meaning is sufficiently similar and hard filters match</td><td>No</td><td>Reuse stable answers for paraphrases</td></tr>
+              <tr><td>Prompt/context cache</td><td>Precomputed state for a prompt prefix</td><td>Rendered prefix matches an eligible breakpoint</td><td>Yes</td><td>Reduce repeated input processing</td></tr>
+              <tr><td>Per-request KV cache</td><td>Attention key/value tensors</td><td>Same active generation sequence</td><td>Yes</td><td>Avoid recomputing previous tokens</td></tr>
+              <tr><td>Cross-request prefix cache</td><td>Reusable KV blocks from older requests</td><td>New request shares an identical prefix</td><td>Yes</td><td>Accelerate prefill across requests</td></tr>
+              <tr><td>Tool or retrieval cache</td><td>SQL, API, search, or RAG results</td><td>Arguments, permissions, and data version match</td><td>Usually</td><td>Avoid repeated backend work</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <aside class="concept-callout"><strong>One agent may use every row.</strong><p>For example, Postgres can hold the durable transcript, Redis can hold exact responses and read-only tool results, the model provider can reuse the prompt prefix, and the inference runtime can maintain a KV cache during generation.</p></aside>
+      </section>
+
+      <section id="chapter-3" class="lesson-section" data-chapter="3" data-title="KV cache mechanics">
+        <header class="section-header"><span>Chapter 03</span><div><h2>What the KV cache actually stores</h2><p>Each attention layer derives Query, Key, and Value representations. During autoregressive decoding, earlier K and V tensors can be reused.</p></div></header>
+        <div class="split-layout">
+          <article class="formula-card">
+            <span class="card-kicker">Conceptual equations</span>
+            <pre><code>Kₜ = hidden_stateₜ × Wₖ
+Vₜ = hidden_stateₜ × Wᵥ</code></pre>
+            <p>At step <em>t</em>, the model computes the new token’s K and V once, appends them to the cache, and attends over cached plus current values.</p>
+          </article>
+          <article class="tensor-card">
+            <span class="card-kicker">Tensor shape</span>
+            <pre><code>[batch, KV heads, sequence length, head dimension]</code></pre>
+            <p>The cache exists per model layer. Memory grows as context, concurrency, batch size, or numeric precision increases.</p>
+          </article>
+        </div>
+        <div class="kv-visualizer" data-lab="kv">
+          <div class="lab-heading"><span>Interactive lab</span><h3>Generate tokens and watch the cache grow</h3></div>
+          <div class="kv-toolbar"><button type="button" id="kvNextButton">Generate next token</button><button type="button" id="kvResetButton">Reset</button><span id="kvStepLabel">0 tokens cached</span></div>
+          <div class="kv-stage">
+            <div class="query-box"><span>Current query</span><strong id="kvQuery">Q₁</strong></div>
+            <div class="kv-cache-box"><span>Stored keys</span><div id="keyTokens" class="token-row"></div></div>
+            <div class="kv-cache-box"><span>Stored values</span><div id="valueTokens" class="token-row"></div></div>
+          </div>
+          <p id="kvExplanation" class="lab-caption">Generate the first token to create K₁ and V₁.</p>
+        </div>
+        <div class="calculator-card" data-lab="memory">
+          <div class="lab-heading"><span>Calculator</span><h3>Estimate KV-cache memory</h3></div>
+          <div class="calculator-grid">
+            <label>Layers<input id="kvLayers" type="number" min="1" max="256" value="32"></label>
+            <label>Context tokens<input id="kvTokens" type="number" min="1" max="10000000" value="4096"></label>
+            <label>KV heads<input id="kvHeads" type="number" min="1" max="256" value="8"></label>
+            <label>Head dimension<input id="kvDimension" type="number" min="1" max="1024" value="128"></label>
+            <label>Bytes per number<input id="kvBytes" type="number" min="1" max="8" value="2"></label>
+            <label>Batch size<input id="kvBatch" type="number" min="1" max="4096" value="1"></label>
+          </div>
+          <div class="result-banner"><span>Estimated cache</span><strong id="kvMemoryResult">512 MiB</strong><small>2 × layers × tokens × KV heads × head dimension × bytes × batch</small></div>
+        </div>
+      </section>
+
+      <section id="chapter-4" class="lesson-section" data-chapter="4" data-title="Per-request versus cross-request prefix caching">
+        <header class="section-header"><span>Chapter 04</span><div><h2>Per-request KV cache versus cross-request prefix cache</h2><p>They reuse the same kind of model state, but across different boundaries.</p></div></header>
+        <div class="comparison-grid">
+          <article><span class="comparison-label">Normal KV cache</span><h3>One request → one ongoing generation</h3><p>The runtime reuses earlier tokens while producing the next token. The cache may disappear when the request ends.</p><div class="mini-flow"><span>Prompt</span><i>→</i><span>Token 1</span><i>→</i><span>Token 2</span><i>→</i><span>Token 3</span></div></article>
+          <article><span class="comparison-label">Prefix cache</span><h3>Earlier request → later request with same beginning</h3><p>The runtime retains reusable KV blocks and lets another request skip prefill for the identical shared prefix.</p><div class="prefix-stack"><span>Agent instructions</span><span>Tool definitions</span><span>Metric glossary</span><b>Question A / Question B</b></div></article>
+        </div>
+        <aside class="warning-callout"><strong>Prefix caching improves prefill, not long-output decoding.</strong><p>If the model must generate 5,000 new tokens, it still has to decode those tokens. Reusing the prefix mainly reduces time and cost before the first output token.</p></aside>
+      </section>
+
+      <section id="chapter-5" class="lesson-section" data-chapter="5" data-title="Prompt caching">
+        <header class="section-header"><span>Chapter 05</span><div><h2>Prompt caching is hosted prefix reuse</h2><p>The provider preserves reusable model state for the stable beginning of a request and generates a fresh answer for each call.</p></div></header>
+        <ol class="process-list">
+          <li><span>1</span><div><strong>Receive the rendered prompt</strong><p>Tools, system/developer instructions, history, retrieved data, and user input form a precise token sequence.</p></div></li>
+          <li><span>2</span><div><strong>Process the stable prefix</strong><p>The model computes attention state for the reusable beginning.</p></div></li>
+          <li><span>3</span><div><strong>Write an eligible cache entry</strong><p>The provider retains the reusable state at a breakpoint.</p></div></li>
+          <li><span>4</span><div><strong>Match a later prefix</strong><p>A later request must share the same rendered beginning through an eligible breakpoint.</p></div></li>
+          <li><span>5</span><div><strong>Process only the new suffix</strong><p>Current permissions, retrieved values, timestamps, and the new question remain uncached when placed after the boundary.</p></div></li>
+          <li><span>6</span><div><strong>Generate a new answer</strong><p>Prompt caching never means “return the answer from last time.”</p></div></li>
+        </ol>
+        <div class="reduce-grid">
+          <article class="positive"><h3>Prompt caching can reduce</h3><ul><li>Repeated input computation</li><li>Cached-input cost</li><li>Time to first output token</li><li>GPU prefill work</li></ul></article>
+          <article class="negative"><h3>Prompt caching does not remove</h3><ul><li>Output-token generation</li><li>Tool and database latency</li><li>Context-window accounting</li><li>Permanent conversation storage</li><li>The changing part of the request</li></ul></article>
+        </div>
+      </section>
+
+      <section id="chapter-6" class="lesson-section" data-chapter="6" data-title="Cache-friendly prompt ordering">
+        <header class="section-header"><span>Chapter 06</span><div><h2>Prefix matching is exact, not semantic</h2><p>A timestamp, request ID, reordered tool schema, or changed earlier message can break reuse after the first changed token.</p></div></header>
+        <div class="prompt-order-lab" data-lab="prompt-order">
+          <div class="lab-heading"><span>Interactive lab</span><h3>Put stable content first and dynamic content last</h3></div>
+          <div class="order-toolbar"><button type="button" id="shuffleOrderButton">Shuffle blocks</button><button type="button" id="optimizeOrderButton">Show recommended order</button><span id="orderScore">Cache score: 100%</span></div>
+          <ol id="promptOrderList" class="prompt-order-list"></ol>
+          <output id="orderFeedback" class="lab-output" aria-live="polite"></output>
+        </div>
+        <div class="principle-banner"><span>Primary principle</span><strong>Stable content first. Dynamic content last.</strong></div>
+        <div class="two-column-notes">
+          <article><h3>Usually stable</h3><p>Tool definitions, agent rules, safety policy, glossary, ontology, output schema, few-shot examples.</p></article>
+          <article><h3>Usually dynamic</h3><p>Tenant permissions, current data, retrieved excerpts, timestamps, session-specific facts, user question.</p></article>
+        </div>
+        <aside class="technical-note"><strong>MCP makes deterministic serialization critical.</strong><p>Sort tools consistently and keep names, descriptions, schemas, and ordering stable. A stable name with a changed schema still changes the rendered prefix.</p><code>tools = sorted(tools, key=lambda tool: tool["name"])</code></aside>
+      </section>
+
+      <section id="chapter-7" class="lesson-section" data-chapter="7" data-title="Provider implementations">
+        <header class="section-header"><span>Chapter 07</span><div><h2>Current provider implementations</h2><p>These details are time-sensitive. Each card links to the official documentation used for the August 26, 2026 verification.</p></div></header>
+        <div class="provider-grid">
+          <article class="provider-card openai-card">
+            <div class="provider-heading"><span>OpenAI</span><small>GPT-5.6 and later</small></div>
+            <ul><li>Implicit and explicit caching</li><li>Explicit breakpoints inside eligible message content blocks</li><li>Minimum cacheable length is model-dependent</li><li>30-minute TTL option for the GPT-5.6 family</li><li>Writes: 1.25×; reads: 0.1× uncached input rate</li><li><code>prompt_cache_key</code> influences routing; it does not redefine equality</li></ul>
+            <div class="correction-note"><strong>Verified correction</strong><p>The supplied draft states a fixed 1,024-token minimum for GPT-5.6. Current OpenAI documentation says the minimum cacheable length varies by model. The module therefore treats 1,024 as a historical/example threshold, not a universal current rule.</p></div>
+            <a href="https://developers.openai.com/api/docs/guides/prompt-caching" target="_blank" rel="noreferrer">Official OpenAI prompt-caching guide ↗</a>
+          </article>
+          <article class="provider-card anthropic-card">
+            <div class="provider-heading"><span>Anthropic</span><small>Claude Platform</small></div>
+            <ul><li>Top-level automatic caching</li><li>Explicit <code>cache_control</code> breakpoints</li><li>Default five-minute TTL</li><li>Optional one-hour TTL</li><li>Prefix order: tools → system → messages</li><li>Usage reports cache-read and cache-creation tokens</li></ul>
+            <a href="https://platform.claude.com/docs/en/build-with-claude/prompt-caching" target="_blank" rel="noreferrer">Official Anthropic prompt-caching guide ↗</a>
+          </article>
+          <article class="provider-card gemini-card">
+            <div class="provider-heading"><span>Google Gemini</span><small>Gemini API</small></div>
+            <ul><li>Implicit caching on Gemini 2.5 and newer models</li><li>Explicit cache objects through Generate Content APIs</li><li>Minimum token limits are model-specific</li><li>Implicit hit count in <code>usage.total_cached_tokens</code></li><li>Explicit TTL is configurable; default is one hour when omitted</li></ul>
+            <a href="https://ai.google.dev/gemini-api/docs/caching" target="_blank" rel="noreferrer">Official Gemini context-caching guide ↗</a>
+          </article>
+          <article class="provider-card vllm-card">
+            <div class="provider-heading"><span>vLLM</span><small>Self-hosted inference</small></div>
+            <ul><li>Automatic Prefix Caching reuses KV blocks</li><li>New requests need an identical shared prefix</li><li>Enable with <code>enable_prefix_caching=True</code></li><li>Best for repeated long documents and growing chats</li><li>Main gain is reduced prefill computation</li></ul>
+            <a href="https://docs.vllm.ai/en/latest/features/automatic_prefix_caching.html" target="_blank" rel="noreferrer">Official vLLM prefix-caching guide ↗</a>
+          </article>
+        </div>
+      </section>
+
+      <section id="chapter-8" class="lesson-section" data-chapter="8" data-title="OpenAI implementation">
+        <header class="section-header"><span>Chapter 08</span><div><h2>OpenAI explicit prompt-caching pattern</h2><p>The reusable developer content is placed in an <code>input_text</code> block because top-level instructions cannot carry an explicit breakpoint.</p></div></header>
+        <div class="code-card">
+          <div class="code-toolbar"><span>Python · Responses API</span><button type="button" data-copy-target="openaiCode">Copy code</button></div>
+          <pre id="openaiCode"><code>from __future__ import annotations
+import os
+from openai import OpenAI
+
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+STATIC_AGENT_PREFIX = """
+You are the Business Narrative Intelligence Agent.
+Explain metric movements, distinguish facts from hypotheses,
+respect metric definitions, and never invent unavailable values.
+
+Metric glossary:
+[Insert stable glossary here.]
+
+Narrative framework:
+[Insert stable narrative rules and examples here.]
+"""
+
+def ask_agent(question: str, tenant_id: str) -> str:
+    question = question.strip()
+    if not question:
+        raise ValueError("question cannot be empty")
+
+    response = client.responses.create(
+        model="gpt-5.6",
+        prompt_cache_key=f"bi-narrative-agent:v1:{tenant_id}",
+        prompt_cache_options={"mode": "explicit", "ttl": "30m"},
+        input=[
+            {
+                "role": "developer",
+                "content": [{
+                    "type": "input_text",
+                    "text": STATIC_AGENT_PREFIX,
+                    "prompt_cache_breakpoint": {"mode": "explicit"},
+                }],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": question}],
+            },
+        ],
+    )
+
+    if response.usage is not None:
+        print(response.usage.model_dump())
+    return response.output_text</code></pre>
+        </div>
+        <div class="implementation-notes">
+          <article><strong>First request</strong><p>Writes the stable prefix when it meets the selected model’s minimum cacheable length.</p></article>
+          <article><strong>Later request</strong><p>Can read the matching prefix, process the new question, and generate a fresh answer.</p></article>
+          <article><strong>Observe usage</strong><p>Track <code>cached_tokens</code>, <code>cache_write_tokens</code>, total input, latency, and realized cost.</p></article>
+        </div>
+      </section>
+
+      <section id="chapter-9" class="lesson-section" data-chapter="9" data-title="Prompt-caching economics">
+        <header class="section-header"><span>Chapter 09</span><div><h2>Prompt-caching economics</h2><p>A cache is valuable only when reads repay the write and operational complexity.</p></div></header>
+        <div class="calculator-card economics-card" data-lab="economics">
+          <div class="lab-heading"><span>Calculator</span><h3>Compare repeated prefix cost</h3></div>
+          <div class="calculator-grid four">
+            <label>Stable prefix tokens<input id="econTokens" type="number" min="1" max="1000000" value="8000"></label>
+            <label>Total requests<input id="econRequests" type="number" min="1" max="100000" value="10"></label>
+            <label>Write multiplier<input id="econWrite" type="number" min="0" max="10" step="0.01" value="1.25"></label>
+            <label>Read multiplier<input id="econRead" type="number" min="0" max="10" step="0.01" value="0.10"></label>
+          </div>
+          <div class="economics-results">
+            <article><span>Without caching</span><strong id="econNoCache">80,000</strong><small>input-token equivalents</small></article>
+            <article><span>With one write + reads</span><strong id="econCache">17,200</strong><small>input-token equivalents</small></article>
+            <article><span>Relative reduction</span><strong id="econSavings">78.5%</strong><small>for the repeated prefix only</small></article>
+          </div>
+          <p class="lab-caption">This excludes the changing question, new retrieved data, tool outputs, and generated answer tokens.</p>
+        </div>
+        <aside class="warning-callout"><strong>Reads per write is the key companion metric.</strong><p>A prefix that is repeatedly written and rarely reused can increase cost. Measure actual writes, reads, hit length, expiry, and routing behavior.</p></aside>
+      </section>
+
+      <section id="chapter-10" class="lesson-section" data-chapter="10" data-title="Exact response caching">
+        <header class="section-header"><span>Chapter 10</span><div><h2>Exact response caching can skip the model entirely</h2><p>Use it only when every answer-affecting input can be represented in a canonical, versioned identity.</p></div></header>
+        <div class="cache-key-diagram">
+          <span>Tenant</span><i>+</i><span>Permission scope</span><i>+</i><span>Model</span><i>+</i><span>Prompt version</span><i>+</i><span>Data snapshot</span><i>+</i><span>Question</span><i>→</i><strong>SHA-256 cache key</strong>
+        </div>
+        <div class="code-card">
+          <div class="code-toolbar"><span>Python · Redis exact cache</span><button type="button" data-copy-target="exactCacheCode">Copy code</button></div>
+          <pre id="exactCacheCode"><code>import hashlib
+import json
+from typing import Any
+
+
+def canonical_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def build_response_cache_key(
+    *,
+    tenant_id: str,
+    permission_scope_hash: str,
+    model: str,
+    prompt_version: str,
+    data_snapshot_id: str,
+    request_payload: dict[str, Any],
+) -> str:
+    identity = {
+        "tenant_id": tenant_id,
+        "permission_scope_hash": permission_scope_hash,
+        "model": model,
+        "prompt_version": prompt_version,
+        "data_snapshot_id": data_snapshot_id,
+        "request": request_payload,
+    }
+    digest = hashlib.sha256(canonical_json(identity).encode("utf-8")).hexdigest()
+    return f"llm-response:v1:{digest}"</code></pre>
+        </div>
+        <div class="key-rules">
+          <article><span>Must include</span><p>Tenant, permissions, model, prompt/tool/schema versions, question, context, data snapshot, locale, and safety settings when they can change the answer.</p></article>
+          <article><span>Must not expose</span><p>Raw secrets or sensitive content in visible Redis keys. Hash a canonical payload instead.</p></article>
+          <article><span>Failure behavior</span><p>Redis failure should normally degrade to a fresh model call. The cache is a disposable optimization, not the source of truth.</p></article>
+        </div>
+      </section>
+
+      <section id="chapter-11" class="lesson-section" data-chapter="11" data-title="Semantic response caching">
+        <header class="section-header"><span>Chapter 11</span><div><h2>Semantic response caching matches meaning—but raises the risk of false hits</h2><p>It can be excellent for stable FAQs and dangerous for personalized, current, or action-oriented requests.</p></div></header>
+        <div class="semantic-flow">
+          <div><span>1</span><strong>Embed incoming question</strong></div><i>→</i>
+          <div><span>2</span><strong>Apply hard metadata filters</strong></div><i>→</i>
+          <div><span>3</span><strong>Run similarity search</strong></div><i>→</i>
+          <div><span>4</span><strong>Threshold hit or miss</strong></div><i>→</i>
+          <div><span>5</span><strong>Return cached answer or call model</strong></div>
+        </div>
+        <div class="semantic-examples">
+          <article class="safe"><h3>Good initial candidates</h3><ul><li>Password-reset instructions</li><li>Stable product documentation</li><li>Non-personalized FAQs</li><li>Approved internal policy explanations</li></ul></article>
+          <article class="unsafe"><h3>High-risk candidates</h3><ul><li>Current KPI values</li><li>Financial balances</li><li>User-specific permissions</li><li>Jurisdiction-specific legal answers</li><li>Inventory, pricing, or action requests</li><li>Questions dependent on conversation context</li></ul></article>
+        </div>
+        <div class="hard-filter-banner"><strong>Semantic similarity is never enough.</strong><p>Require the same tenant, permission scope, data version, locale, intent type, model/version, safety status, and freshness boundary before considering the vector threshold.</p></div>
+        <a class="source-link" href="https://redis.io/docs/latest/develop/use-cases/semantic-cache/" target="_blank" rel="noreferrer">Redis semantic-cache guidance ↗</a>
+      </section>
+
+      <section id="chapter-12" class="lesson-section" data-chapter="12" data-title="Conversation state is not a cache">
+        <header class="section-header"><span>Chapter 12</span><div><h2>Conversation history is authoritative state</h2><p>The model only knows earlier facts when the application sends them again, summarizes them, references a managed conversation, or retrieves long-term memory.</p></div></header>
+        <div class="conversation-example">
+          <div class="message user"><span>User · Turn 1</span><p>My preferred market is Northeast.</p></div>
+          <div class="message user"><span>User · Turn 2</span><p>Show me churn.</p></div>
+          <div class="state-gate"><strong>How does Turn 2 know Turn 1?</strong><p>Replay messages · send a summary · use a provider conversation ID · retrieve durable memory</p></div>
+        </div>
+        <div class="state-options">
+          <article><h3>PostgreSQL / MongoDB</h3><p>Messages, summaries, user facts, feedback, audit records, and durable thread metadata.</p></article>
+          <article><h3>Redis with persistence</h3><p>Short-lived session state, queues, coordination, rate limits, and optionally durable state when configured accordingly.</p></article>
+          <article><h3>Provider-managed conversations</h3><p>Useful convenience, but still evaluate retention, portability, privacy, and source-of-truth requirements.</p></article>
+        </div>
+        <aside class="principle-banner"><span>Rule</span><strong>Prompt caching may make history cheaper to process; it does not make the cache your authoritative memory store.</strong></aside>
+      </section>
+
+      <section id="chapter-13" class="lesson-section" data-chapter="13" data-title="Tool and RAG caching">
+        <header class="section-header"><span>Chapter 13</span><div><h2>Tool and retrieval caching often saves more time than model caching</h2><p>Agents can repeatedly call warehouses, sheets, internal APIs, vector search, MCP servers, and web services.</p></div></header>
+        <div class="tool-cache-example">
+          <div class="tool-call"><span>Tool call</span><pre><code>get_metric(
+  metric="churn",
+  period="2026-07",
+  market="Northeast"
+)</code></pre></div>
+          <div class="tool-key"><span>Safe key</span><p>tool name + normalized arguments + tenant + permission scope + source-data snapshot + tool version</p></div>
+        </div>
+        <div class="semantic-examples">
+          <article class="safe"><h3>Cacheable read operations</h3><ul><li>Read-only metric lookup</li><li>Static reference data</li><li>Document chunk retrieval</li><li>Published reports</li><li>Short-TTL exchange rates</li></ul></article>
+          <article class="unsafe"><h3>Never replay as execution</h3><ul><li><code>send_email()</code></li><li><code>create_ticket()</code></li><li><code>update_dashboard()</code></li><li><code>delete_file()</code></li><li><code>transfer_money()</code></li><li><code>approve_request()</code></li></ul></article>
+        </div>
+        <aside class="warning-callout"><strong>Side-effect result ≠ side effect executed.</strong><p>Returning the cached result of an earlier write operation would falsely imply that the current action happened. Cache read-only observations, not external mutations.</p></aside>
+      </section>
+
+      <section id="chapter-14" class="lesson-section" data-chapter="14" data-title="BI reference architecture">
+        <header class="section-header"><span>Chapter 14</span><div><h2>Recommended caching architecture for a BI narrative agent</h2><p>Use different layers for durable context, deterministic reuse, provider-prefix reuse, and runtime inference efficiency.</p></div></header>
+        <div class="bi-architecture" role="img" aria-label="BI narrative agent caching architecture">
+          <article class="architecture-layer store"><span>Durable state</span><strong>PostgreSQL / MongoDB</strong><p>Conversation messages · summaries · feedback · audit trail</p></article>
+          <article class="architecture-layer redis"><span>Application cache</span><strong>Redis</strong><p>Exact response cache · read-only tool cache · rate limits · short-lived session state</p></article>
+          <article class="architecture-layer prefix"><span>Cacheable prompt prefix</span><strong>Stable model context</strong><p>Agent rules · persona · tool/MCP schemas · metric glossary · ontology · templates · few-shot examples</p></article>
+          <div class="breakpoint"><span>Cache breakpoint</span><i></i></div>
+          <article class="architecture-layer dynamic"><span>Dynamic prompt suffix</span><strong>Per-request context</strong><p>User identity · permissions · report period · current query results · retrieved excerpts · current question</p></article>
+          <article class="architecture-layer runtime"><span>Inference runtime</span><strong>Model + KV cache</strong><p>Fresh answer generation with per-request decoding reuse</p></article>
+        </div>
+        <div class="optimization-matrix">
+          <article><span>Stable ontology, tools, persona</span><strong>Provider prompt cache</strong></article>
+          <article><span>Identical snapshot-bound question</span><strong>Exact response cache</strong></article>
+          <article><span>Repeated SQL and retrieval</span><strong>Tool/RAG cache</strong></article>
+          <article><span>Active token generation</span><strong>Runtime KV cache</strong></article>
+        </div>
+        <aside class="technical-note"><strong>BI recommendation.</strong><p>Start with semantic answer caching disabled for executive KPI questions. Introduce it later for stable FAQ and documentation intents only after an evaluation set measures false hits.</p></aside>
+      </section>
+
+      <section id="chapter-15" class="lesson-section" data-chapter="15" data-title="Invalidation and metrics">
+        <header class="section-header"><span>Chapter 15</span><div><h2>Invalidation and observability determine whether a cache is trustworthy</h2><p>Storing data is easy. Knowing when reuse is no longer valid is the real engineering problem.</p></div></header>
+        <div class="version-list">
+          <code>agent_prompt_version = "v7"</code>
+          <code>tool_schema_version = "v3"</code>
+          <code>metric_glossary_version = "2026-08-21"</code>
+          <code>ontology_version = "v12"</code>
+          <code>data_snapshot_id = "2026-08-26T07:45:00Z"</code>
+          <code>permission_scope_hash = "a84..."</code>
+        </div>
+        <div class="invalidation-grid">
+          <article><h3>Natural miss or invalidate when</h3><ul><li>Agent instructions change</li><li>Tool or output schema changes</li><li>Metric definition or ontology changes</li><li>Source data refreshes</li><li>User permissions change</li><li>Model or reasoning settings change</li><li>Safety policy or tenant configuration changes</li></ul></article>
+          <article><h3>Production metrics</h3><ul><li>Prompt-cache token hit rate</li><li>Cache reads per write</li><li>Exact response-cache hit rate</li><li>Tool-cache hit rate</li><li>P50/P95 time to first token</li><li>Input cost per successful turn</li><li>Stale-answer and semantic false-hit rates</li><li>Cross-tenant isolation violations</li><li>Evictions and memory size</li></ul></article>
+        </div>
+        <div class="metrics-formulas">
+          <article><span>Prompt-cache token hit rate</span><code>sum(cached_input_tokens) / sum(total_input_tokens)</code></article>
+          <article><span>Reads per write</span><code>number_of_cache_reads / number_of_cache_writes</code></article>
+          <article><span>Exact response hit rate</span><code>response_cache_hits / cacheable_requests</code></article>
+        </div>
+        <aside class="principle-banner"><span>Operating principle</span><strong>A cache is a disposable optimization, never the source of truth.</strong></aside>
+      </section>
+
+      <section id="chapter-16" class="lesson-section" data-chapter="16" data-title="Experiments and knowledge check">
+        <header class="section-header"><span>Chapter 16</span><div><h2>Practical experiments and final knowledge check</h2><p>Make each distinction observable before implementing production caching.</p></div></header>
+        <div class="experiment-list">
+          <article><span>A</span><div><h3>Prompt caching</h3><p>Use a large stable prefix and three changing questions. Log total input, cached tokens, write tokens, and time to first token.</p><strong>Expected: first call writes; later calls read.</strong></div></article>
+          <article><span>B</span><div><h3>Break the prefix</h3><p>Place a changing timestamp at the beginning, then move it after the cache breakpoint.</p><strong>Expected: reuse disappears, then returns.</strong></div></article>
+          <article><span>C</span><div><h3>Exact response cache</h3><p>Ask an identical snapshot-bound question twice.</p><strong>Expected: second response skips the model.</strong></div></article>
+          <article><span>D</span><div><h3>Change the data snapshot</h3><p>Change the report refresh identifier while keeping the question identical.</p><strong>Expected: exact cache miss and fresh answer.</strong></div></article>
+          <article><span>E</span><div><h3>Self-hosted prefix caching</h3><p>Run repeated questions against the same long document with vLLM prefix caching enabled.</p><strong>Expected: lower prefill latency, not faster long-output decoding.</strong></div></article>
+        </div>
+
+        <form id="knowledgeCheck" class="quiz-card">
+          <div class="lab-heading"><span>Knowledge check</span><h3>Five questions</h3></div>
+          <fieldset data-answer="b"><legend>1. Which mechanism returns an old answer without running the model?</legend><label><input type="radio" name="q1" value="a"> Prompt caching</label><label><input type="radio" name="q1" value="b"> Exact response caching</label><label><input type="radio" name="q1" value="c"> Per-request KV caching</label></fieldset>
+          <fieldset data-answer="c"><legend>2. What does the K in KV cache represent?</legend><label><input type="radio" name="q2" value="a"> A Redis lookup key</label><label><input type="radio" name="q2" value="b"> A conversation ID</label><label><input type="radio" name="q2" value="c"> An attention key tensor</label></fieldset>
+          <fieldset data-answer="a"><legend>3. Where should a changing timestamp usually appear?</legend><label><input type="radio" name="q3" value="a"> After the stable cached prefix</label><label><input type="radio" name="q3" value="b"> At the very beginning</label><label><input type="radio" name="q3" value="c"> Inside every tool description</label></fieldset>
+          <fieldset data-answer="b"><legend>4. Which input is essential for exact caching of current BI answers?</legend><label><input type="radio" name="q4" value="a"> A random request ID</label><label><input type="radio" name="q4" value="b"> The source-data snapshot or refresh version</label><label><input type="radio" name="q4" value="c"> The color theme</label></fieldset>
+          <fieldset data-answer="c"><legend>5. What should happen when Redis is unavailable?</legend><label><input type="radio" name="q5" value="a"> Return the last answer for every question</label><label><input type="radio" name="q5" value="b"> Fail the whole agent by default</label><label><input type="radio" name="q5" value="c"> Continue through the normal model or tool path when safe</label></fieldset>
+          <div class="quiz-actions"><button type="submit">Check answers</button><button type="button" id="quizResetButton">Clear</button><output id="quizResult" aria-live="polite"></output></div>
+        </form>
+
+        <div class="mental-model-card">
+          <h3>The mental model to retain</h3>
+          <dl>
+            <div><dt>Remember the chat tomorrow?</dt><dd>Conversation persistence</dd></div>
+            <div><dt>Return the exact previous answer?</dt><dd>Exact response cache</dd></div>
+            <div><dt>Reuse stable FAQ answers for paraphrases?</dt><dd>Semantic response cache</dd></div>
+            <div><dt>Fresh answer from the same large instructions?</dt><dd>Prompt/context caching</dd></div>
+            <div><dt>Faster autoregressive generation?</dt><dd>Per-request KV cache</dd></div>
+            <div><dt>Reuse KV state between requests?</dt><dd>Prefix caching</dd></div>
+            <div><dt>Avoid repeated SQL, API, RAG, or MCP work?</dt><dd>Tool/retrieval caching</dd></div>
+          </dl>
+        </div>
+        <div class="module-complete-card">
+          <span>Module 1 complete</span>
+          <h3>Next: Context, conversation state, memory, and compaction</h3>
+          <p>Those mechanisms determine what context enters the prompt before you optimize it with caching.</p>
+          <a href="../../">Apply the mental model in HarnessLab <span aria-hidden="true">→</span></a>
+        </div>
+      </section>
+
+      <footer class="module-footer">
+        <div><strong>HarnessLab Academy</strong><span>Source-derived curriculum with provider details verified August 26, 2026.</span></div>
+        <div><a href="../../guide/">Architecture guide</a><a href="../../">Builder</a><a href="#module-title">Back to top</a></div>
+      </footer>
+    </main>
+  </div>
+
+  <script type="module" src="./module.js"></script>
+</body>
+</html>
