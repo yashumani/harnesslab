@@ -1,0 +1,150 @@
+name: Academy Caching Module
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/academy/caching/**'
+      - 'apps/web/learn-hub.*'
+      - 'scripts/capture-academy-caching-viewport.mjs'
+      - 'scripts/validate-academy-caching.mjs'
+      - 'tests/academy-caching-module.test.mjs'
+      - 'docs/architecture/ACADEMY_CACHING_MODULE.md'
+      - 'package.json'
+      - '.github/workflows/academy-caching-integration.yml'
+      - '.github/workflows/verify-academy-caching-pages.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/academy/caching/**'
+      - 'apps/web/learn-hub.*'
+      - 'scripts/capture-academy-caching-viewport.mjs'
+      - 'scripts/validate-academy-caching.mjs'
+      - 'tests/academy-caching-module.test.mjs'
+      - 'docs/architecture/ACADEMY_CACHING_MODULE.md'
+      - 'package.json'
+      - '.github/workflows/academy-caching-integration.yml'
+      - '.github/workflows/verify-academy-caching-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: academy-caching-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  module:
+    name: Module / required
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Validate application and Academy contracts
+        run: npm run check
+
+      - name: Serve the GitHub Pages package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4177 --directory apps/web > /tmp/harnesslab-academy-http.log 2>&1 &
+          echo $! > /tmp/harnesslab-academy-http.pid
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:4177/academy/caching/ > /tmp/harnesslab-academy.html; then
+              exit 0
+            fi
+            sleep 0.25
+          done
+          cat /tmp/harnesslab-academy-http.log
+          exit 1
+
+      - name: Verify module routes and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent http://127.0.0.1:4177/academy/caching/module.css > /tmp/harnesslab-academy.css
+          curl --fail --silent http://127.0.0.1:4177/academy/caching/module.js > /tmp/harnesslab-academy.js
+          curl --fail --silent http://127.0.0.1:4177/learn-hub.js > /tmp/harnesslab-learn-hub.js
+          grep -q 'Module 1 — Chat, Prompt, and KV Caching' /tmp/harnesslab-academy.html
+          grep -q 'id="chapter-16"' /tmp/harnesslab-academy.html
+          grep -q 'data-module-theme="midnight"' /tmp/harnesslab-academy.html
+          grep -q 'HarnessLabCachingModule' /tmp/harnesslab-academy.js
+          grep -q 'Module 1 · Caching' /tmp/harnesslab-learn-hub.js
+          grep -q '@media (max-width: 760px)' /tmp/harnesslab-academy.css
+
+      - name: Audit exact desktop and phone module viewports
+        shell: bash
+        env:
+          CHROME_DEBUG_PORT: 9229
+        run: |
+          set -euo pipefail
+          mkdir -p academy-caching-evidence
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "${browser}" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.'
+            exit 1
+          fi
+
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=9229 \
+            --user-data-dir=/tmp/harnesslab-academy-chrome \
+            about:blank > /tmp/harnesslab-academy-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${browser_pid}" 2>/dev/null || true; kill "$(cat /tmp/harnesslab-academy-http.pid)" 2>/dev/null || true' EXIT
+
+          for attempt in {1..50}; do
+            if curl --fail --silent http://127.0.0.1:9229/json/version > /dev/null; then
+              break
+            fi
+            sleep 0.2
+          done
+
+          node scripts/capture-academy-caching-viewport.mjs \
+            desktop 1440 1000 \
+            'http://127.0.0.1:4177/academy/caching/?audit=1' \
+            academy-caching-evidence
+
+          node scripts/capture-academy-caching-viewport.mjs \
+            phone 390 844 \
+            'http://127.0.0.1:4177/academy/caching/?audit=1' \
+            academy-caching-evidence
+
+          test -s academy-caching-evidence/desktop.png
+          test -s academy-caching-evidence/desktop.json
+          test -s academy-caching-evidence/phone.png
+          test -s academy-caching-evidence/phone.json
+
+      - name: Upload Academy module evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-academy-caching
+          path: academy-caching-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summarize Module 1
+        shell: bash
+        run: |
+          {
+            echo '### HarnessLab Academy — Module 1'
+            echo
+            echo '- Sixteen source-derived caching chapters: validated'
+            echo '- Provider-specific verification boundaries: validated'
+            echo '- Interactive selector, KV labs, prompt-order lab, economics, and quiz: validated'
+            echo '- Desktop 1440×1000: no page overflow, clipped primary controls, or undersized controls'
+            echo '- Phone 390×844: touch input and responsive containment validated'
+            echo '- Evidence artifact: `harnesslab-academy-caching`'
+          } >> "$GITHUB_STEP_SUMMARY"
