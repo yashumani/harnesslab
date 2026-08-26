@@ -2,6 +2,7 @@ const GUIDE_URL = new URL('./guide/', import.meta.url).href;
 const GUIDE_END_USER_URL = new URL('./guide/#slide-15', import.meta.url).href;
 const GUIDE_DEVELOPER_URL = new URL('./guide/#slide-16', import.meta.url).href;
 const GUIDE_ARCHITECTURE_URL = new URL('./guide/#slide-7', import.meta.url).href;
+const CACHE_MODULE_URL = new URL('./academy/caching/', import.meta.url).href;
 const STYLESHEET_URL = new URL('./learn-hub.css', import.meta.url).href;
 const FOCUSABLE = [
   'a[href]',
@@ -110,7 +111,7 @@ class HarnessLabLearnHub extends HTMLElement {
       <link rel="stylesheet" href="${STYLESHEET_URL}">
       <button class="learn-launcher" data-action="open" type="button" aria-expanded="${this.open}" aria-controls="harnesslab-learn-panel">
         <span class="launcher-icon" aria-hidden="true">?</span>
-        <span><strong>Learn HarnessLab</strong><small>Interactive architecture guide</small></span>
+        <span><strong>Learn HarnessLab</strong><small>Academy modules + architecture guide</small></span>
         <i aria-hidden="true">New</i>
       </button>
 
@@ -124,23 +125,24 @@ class HarnessLabLearnHub extends HTMLElement {
 
           <section class="guide-feature">
             <div class="feature-copy">
-              <span class="feature-kicker">18-chapter interactive guide</span>
+              <span class="feature-kicker">Academy curriculum + 18-chapter guide</span>
               <h3>From AI idea to dependable harness</h3>
-              <p>Learn what HarnessLab does, how to use it, how architecture decisions are made, and how developers turn the result into a real implementation.</p>
-              <div class="feature-tags"><span>Plain English</span><span>Technical detail</span><span>Diagrams</span><span>End-user + developer</span></div>
+              <p>Learn core agent-engineering concepts in detailed modules, then use the architecture guide to connect those concepts to HarnessLab decisions and implementation.</p>
+              <div class="feature-tags"><span>Plain English</span><span>Technical detail</span><span>Diagrams</span><span>Interactive labs</span></div>
             </div>
             <div class="guide-preview" aria-hidden="true">
-              <article><span>01</span><b>What is HarnessLab?</b><i></i></article>
+              <article><span>M1</span><b>Caching foundations</b><i></i></article>
               <article><span>07</span><b>Decision ladder</b><i></i></article>
               <article><span>11</span><b>System architecture</b><i></i></article>
             </div>
           </section>
 
-          <a class="primary-guide-link" href="${GUIDE_URL}">
-            <span><b>Open the full presentation</b><small>Keyboard, touch, fullscreen, overview, and print</small></span><i aria-hidden="true">→</i>
+          <a class="primary-guide-link" href="${CACHE_MODULE_URL}">
+            <span><b>Module 1 · Caching</b><small>Chat state, response caching, prompt prefixes, KV tensors, and tool caches</small></span><i aria-hidden="true">→</i>
           </a>
 
           <div class="learning-paths">
+            <a href="${GUIDE_URL}"><span class="path-icon">G</span><div><b>Full architecture guide</b><small>Explore all 18 chapters with diagrams, keyboard navigation, fullscreen, and print.</small></div><i>→</i></a>
             <a href="${GUIDE_END_USER_URL}"><span class="path-icon">U</span><div><b>End-user path</b><small>How to describe, refine, review, and save a harness.</small></div><i>→</i></a>
             <a href="${GUIDE_DEVELOPER_URL}"><span class="path-icon">D</span><div><b>Developer path</b><small>How to translate decisions into layers, contracts, and tests.</small></div><i>→</i></a>
             <a href="${GUIDE_ARCHITECTURE_URL}"><span class="path-icon">A</span><div><b>Architecture path</b><small>Workflow vs agent vs temporary subagents vs A2A.</small></div><i>→</i></a>
@@ -148,7 +150,7 @@ class HarnessLabLearnHub extends HTMLElement {
 
           <section class="scope-note">
             <span aria-hidden="true">✓</span>
-            <div><b>The guide describes both the current product and the intended platform direction.</b><p>Live execution boundaries are labeled clearly. A visual plan never pretends that a model, tool, MCP server, A2A peer, or production action ran.</p></div>
+            <div><b>Academy modules separate durable concepts from time-sensitive provider details.</b><p>Provider behavior is verified against official documentation and labeled with a verification date. No lesson receives credentials, tool authority, or model execution.</p></div>
           </section>
 
           <footer class="learn-footer"><span>Press <kbd>Esc</kbd> to close</span><a href="${GUIDE_URL}#slide-18">Quick start →</a></footer>
