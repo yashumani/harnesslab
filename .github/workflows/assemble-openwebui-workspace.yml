@@ -6,6 +6,16 @@ on:
       - feat/openwebui-workspace-shell
     paths:
       - '.openwebui-payload/**'
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - '.openwebui-payload/**'
+      - '.github/workflows/assemble-openwebui-workspace.yml'
 
 permissions:
   contents: write
@@ -17,6 +27,7 @@ concurrency:
 jobs:
   assemble:
     name: Workspace / assemble
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
