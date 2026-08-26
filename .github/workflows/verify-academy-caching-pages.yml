@@ -1,0 +1,122 @@
+name: Verify Academy Caching Pages
+
+on:
+  workflow_run:
+    workflows: ['Deploy HarnessLab to Pages']
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-academy-caching-pages
+  cancel-in-progress: true
+
+jobs:
+  live:
+    name: Module / live
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Check out verified repository code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Wait for and verify public module assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://yashumani.github.io/harnesslab'
+          ready=false
+          for attempt in {1..60}; do
+            if curl --fail --silent --show-error "${base}/academy/caching/" > /tmp/harnesslab-academy-live.html \
+              && curl --fail --silent --show-error "${base}/academy/caching/module.css" > /tmp/harnesslab-academy-live.css \
+              && curl --fail --silent --show-error "${base}/academy/caching/module.js" > /tmp/harnesslab-academy-live.js \
+              && curl --fail --silent --show-error "${base}/learn-hub.js" > /tmp/harnesslab-learn-hub-live.js; then
+              if grep -q 'Module 1 — Chat, Prompt, and KV Caching' /tmp/harnesslab-academy-live.html \
+                && grep -q 'id="chapter-16"' /tmp/harnesslab-academy-live.html \
+                && grep -q 'HarnessLabCachingModule' /tmp/harnesslab-academy-live.js \
+                && grep -q 'Module 1 · Caching' /tmp/harnesslab-learn-hub-live.js; then
+                ready=true
+                break
+              fi
+            fi
+            sleep 5
+          done
+          if [[ "${ready}" != 'true' ]]; then
+            echo 'The public Academy caching module did not publish the expected release.'
+            exit 1
+          fi
+
+      - name: Audit exact public desktop and phone viewports
+        shell: bash
+        env:
+          CHROME_DEBUG_PORT: 9230
+        run: |
+          set -euo pipefail
+          mkdir -p academy-caching-live-evidence
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "${browser}" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.'
+            exit 1
+          fi
+
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=9230 \
+            --user-data-dir=/tmp/harnesslab-academy-live-chrome \
+            about:blank > /tmp/harnesslab-academy-live-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${browser_pid}" 2>/dev/null || true' EXIT
+
+          for attempt in {1..50}; do
+            if curl --fail --silent http://127.0.0.1:9230/json/version > /dev/null; then
+              break
+            fi
+            sleep 0.2
+          done
+
+          node scripts/capture-academy-caching-viewport.mjs \
+            desktop 1440 1000 \
+            'https://yashumani.github.io/harnesslab/academy/caching/?audit=1' \
+            academy-caching-live-evidence
+
+          node scripts/capture-academy-caching-viewport.mjs \
+            phone 390 844 \
+            'https://yashumani.github.io/harnesslab/academy/caching/?audit=1' \
+            academy-caching-live-evidence
+
+      - name: Upload live Academy evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-academy-caching-live
+          path: academy-caching-live-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record the verified deployment
+        shell: bash
+        run: |
+          {
+            echo '### Public HarnessLab Academy Module 1 verified'
+            echo
+            echo '- Route: https://yashumani.github.io/harnesslab/academy/caching/'
+            echo '- Sixteen chapters and all interactive labs: present'
+            echo '- Official provider-source links and verification date: present'
+            echo '- Desktop 1440×1000 and phone 390×844: passed'
+            echo '- Page overflow, clipped primary controls, and undersized controls: zero'
+            echo '- Provider credentials and runtime network calls: absent'
+          } >> "$GITHUB_STEP_SUMMARY"
