@@ -1,20 +1,24 @@
 <!doctype html>
-<html lang="en" data-design="taskzen" data-layout="desktop">
+<html lang="en" data-design="taskzen" data-layout="desktop" data-workspace="openwebui-inspired">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#F7F8FC">
-  <meta name="description" content="HarnessLab is a deploy-first AI agent harness builder with evidence-backed requirement readiness, one bounded executable temporary critic, provider-neutral analysis, policy controls, and an interactive architecture guide.">
+  <meta name="description" content="HarnessLab is a chat-centered AI agent harness workspace with evidence-backed requirement readiness, bounded critic review, provider-neutral analysis, durable local projects, and interactive architecture guidance.">
+  <meta name="application-capabilities" content="One bounded executable temporary critic; no tools, child agents, or external actions.">
   <meta name="color-scheme" content="light">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:* https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
-  <title>HarnessLab — AI Agent Harness Builder</title>
+  <title>HarnessLab — AI Agent Harness Builder Workspace</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="stylesheet" href="./react-app.css">
-  <!-- Original product UI based on high-level patterns from the free Taskzen Framer template. No template source or artwork is embedded. -->
+  <!-- Legacy functional and accessibility layers remain loaded for compatibility. -->
   <link rel="stylesheet" href="./taskzen-theme.css">
   <link rel="stylesheet" href="./taskzen-responsive.css">
+  <!-- Original HarnessLab workspace adapted from high-level Open WebUI interaction patterns. No Open WebUI source, branding, artwork, or assets are bundled. -->
+  <link rel="stylesheet" href="./openwebui-theme.css">
+  <link rel="stylesheet" href="./openwebui-responsive-hardening.css">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -23,7 +27,7 @@
       <div class="boot-mark">H</div>
       <div>
         <strong>Starting HarnessLab</strong>
-        <span>Loading the no-build agent harness workspace…</span>
+        <span>Loading the agent harness workspace…</span>
       </div>
     </div>
   </div>
@@ -41,5 +45,6 @@
   <script type="module" src="./critic-console.js"></script>
   <script type="module" src="./app.js"></script>
   <script type="module" src="./learn-hub.js"></script>
+  <script type="module" src="./openwebui-console-bridge.js"></script>
 </body>
 </html>
