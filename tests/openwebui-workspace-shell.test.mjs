@@ -52,9 +52,9 @@ test('uses an original responsive workspace visual system without remote artwork
     '.owui-chat-scroll',
     '.owui-composer-wrap',
     '.owui-inspector',
-    '.owui-projects-page',
-    '.owui-runtime-page',
-    '.owui-evidence-page'
+    '.owui-page-scroll',
+    '.owui-page-heading',
+    '.owui-settings-card'
   ]) assert.ok(theme.includes(selector), `missing workspace selector ${selector}`);
   assert.match(theme, /@media \(max-width: 1280px\)/);
   assert.match(theme, /@media \(max-width: 1120px\)/);
