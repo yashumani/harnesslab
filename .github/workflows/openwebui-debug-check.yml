@@ -1,0 +1,70 @@
+name: Open WebUI workspace debug
+
+on:
+  push:
+    branches:
+      - feat/openwebui-workspace-shell
+    paths:
+      - 'apps/web/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/openwebui-debug-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openwebui-workspace-debug
+  cancel-in-progress: true
+
+jobs:
+  debug:
+    name: Workspace / diagnostic checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Capture syntax, test, and validation output
+        id: checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p openwebui-debug
+
+          npm run check:syntax > openwebui-debug/syntax.log 2>&1
+          syntax_status=$?
+
+          npm run test > openwebui-debug/tests.log 2>&1
+          tests_status=$?
+
+          npm run validate > openwebui-debug/validate.log 2>&1
+          validate_status=$?
+
+          {
+            echo "syntax=${syntax_status}"
+            echo "tests=${tests_status}"
+            echo "validate=${validate_status}"
+          } | tee openwebui-debug/status.txt
+
+          if [[ "${syntax_status}" -ne 0 || "${tests_status}" -ne 0 || "${validate_status}" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload focused diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwebui-debug-check
+          path: openwebui-debug
+          if-no-files-found: error
+          retention-days: 7
