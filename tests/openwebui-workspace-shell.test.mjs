@@ -2,15 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [page, app, theme] = await Promise.all([
+const [page, app, theme, responsiveHardening, consoleBridge] = await Promise.all([
   readFile('apps/web/index.html', 'utf8'),
   readFile('apps/web/app.js', 'utf8'),
-  readFile('apps/web/openwebui-theme.css', 'utf8')
+  readFile('apps/web/openwebui-theme.css', 'utf8'),
+  readFile('apps/web/openwebui-responsive-hardening.css', 'utf8'),
+  readFile('apps/web/openwebui-console-bridge.js', 'utf8')
 ]);
 
 test('loads the Open WebUI-inspired workspace layer after compatibility styles', () => {
   assert.match(page, /data-workspace="openwebui-inspired"/);
   assert.ok(page.indexOf('href="./openwebui-theme.css"') > page.indexOf('href="./taskzen-responsive.css"'));
+  assert.ok(page.indexOf('href="./openwebui-responsive-hardening.css"') > page.indexOf('href="./openwebui-theme.css"'));
+  assert.match(page, /src="\.\/openwebui-console-bridge\.js"/);
   assert.match(page, /No Open WebUI source, branding, artwork, or assets are bundled/);
 });
 
@@ -62,4 +66,15 @@ test('uses an original responsive workspace visual system without remote artwork
   assert.match(theme, /prefers-reduced-motion/);
   assert.doesNotMatch(theme, /url\s*\(\s*["']?https?:|data:image\//i);
   assert.equal((theme.match(/{/g) || []).length, (theme.match(/}/g) || []).length);
+});
+
+test('keeps phone controls reachable and embedded consoles off the composer', () => {
+  assert.match(responsiveHardening, /menu-button\.owui-icon-button/);
+  assert.match(responsiveHardening, /min-height: 42px/);
+  assert.match(consoleBridge, /harnesslab-requirement-intelligence/);
+  assert.match(consoleBridge, /harnesslab-critic-console/);
+  assert.match(consoleBridge, /top: 128px/);
+  assert.match(consoleBridge, /top: 184px/);
+  assert.match(consoleBridge, /MutationObserver/);
+  assert.doesNotMatch(consoleBridge, /fetch\(|XMLHttpRequest|WebSocket/);
 });
