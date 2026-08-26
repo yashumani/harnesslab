@@ -18,7 +18,7 @@ test('replaces the marketing page with one chat-centered application shell', () 
   assert.match(app, /data-ui-pattern="openwebui"/);
   assert.match(app, />New harness</);
   assert.match(app, /Search projects and runs/);
-  assert.match(app, /owui-chat-canvas/);
+  assert.match(app, /owui-chat-scroll/);
   assert.match(app, /owui-composer/);
   assert.match(app, /owui-inspector/);
   assert.match(app, /MAIN_VIEWS\.CHAT/);
@@ -35,7 +35,7 @@ test('preserves projects, runtime controls, artifacts, and critic integration', 
     /exportWorkspace/,
     /harnesslab:analysis-result/,
     /Blueprint/,
-    /Temporary agents/,
+    /temporary agents planned/,
     /Controls/,
     /Evidence/,
     /Harness JSON/
@@ -49,7 +49,7 @@ test('uses an original responsive workspace visual system without remote artwork
   for (const selector of [
     '.sidebar.owui-sidebar',
     '.topbar.owui-header',
-    '.owui-chat-canvas',
+    '.owui-chat-scroll',
     '.owui-composer-wrap',
     '.owui-inspector',
     '.owui-projects-page',
