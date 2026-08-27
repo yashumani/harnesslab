@@ -38,7 +38,8 @@ export function createHarnessLabCopilotServer({
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('Vary', 'Origin');
+    response.setHeader('Vary', 'Origin, Access-Control-Request-Headers');
+
     if (origin && !allowedOrigins.has(origin)) {
       response.status(403).json({
         error: {
@@ -48,6 +49,23 @@ export function createHarnessLabCopilotServer({
       });
       return;
     }
+
+    if (origin) {
+      response.setHeader('Access-Control-Allow-Origin', origin);
+      response.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+
+    if (request.method === 'OPTIONS') {
+      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      response.setHeader(
+        'Access-Control-Allow-Headers',
+        request.headers['access-control-request-headers'] || 'Content-Type, Authorization'
+      );
+      response.setHeader('Access-Control-Max-Age', '600');
+      response.status(204).end();
+      return;
+    }
+
     next();
   });
 
