@@ -1,0 +1,144 @@
+name: CopilotKit Foundation
+
+on:
+  pull_request:
+    paths:
+      - 'apps/copilotkit-web/**'
+      - 'apps/web/copilotkit-launcher.js'
+      - 'apps/web/index.html'
+      - 'services/copilotkit-runtime/**'
+      - 'scripts/smoke-copilotkit-agent.mjs'
+      - 'scripts/verify-copilotkit-browser.mjs'
+      - 'scripts/validate-copilotkit.mjs'
+      - 'tests/copilotkit-foundation.test.mjs'
+      - 'docs/architecture/COPILOTKIT_INTEGRATION.md'
+      - 'package.json'
+      - 'vite.copilotkit.config.mjs'
+      - '.github/workflows/copilotkit-foundation.yml'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: copilotkit-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  copilotkit:
+    name: CopilotKit / required
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install pinned dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Validate the complete application and CopilotKit contracts
+        run: npm run check
+
+      - name: Execute the deterministic AG-UI agent directly
+        run: npm run smoke:copilotkit
+
+      - name: Build the CopilotKit Pages route
+        run: npm run build:copilot
+
+      - name: Start the deterministic CopilotKit runtime and Pages package
+        shell: bash
+        run: |
+          set -euo pipefail
+          COPILOTKIT_HOST=127.0.0.1 COPILOTKIT_PORT=8790 npm run copilotkit:runtime > /tmp/harnesslab-copilotkit-runtime.log 2>&1 &
+          echo $! > /tmp/harnesslab-copilotkit-runtime.pid
+          python3 -m http.server 4180 --directory apps/web > /tmp/harnesslab-copilotkit-pages.log 2>&1 &
+          echo $! > /tmp/harnesslab-copilotkit-pages.pid
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8790/health > /tmp/copilotkit-health.json \
+              && curl --fail --silent http://127.0.0.1:8790/api/copilotkit/info > /tmp/copilotkit-info.json \
+              && curl --fail --silent http://127.0.0.1:4180/copilot/ > /tmp/copilotkit-page.html; then
+              exit 0
+            fi
+            sleep 0.25
+          done
+          cat /tmp/harnesslab-copilotkit-runtime.log || true
+          cat /tmp/harnesslab-copilotkit-pages.log || true
+          exit 1
+
+      - name: Verify runtime identity and static assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'harnesslab-copilotkit-runtime' /tmp/copilotkit-health.json
+          grep -q 'harnessArchitect' /tmp/copilotkit-info.json
+          grep -q 'HarnessLab Copilot' /tmp/copilotkit-page.html
+          asset="$(grep -oE 'src="[^"]+\.js"' /tmp/copilotkit-page.html | head -1 | cut -d'"' -f2)"
+          test -n "${asset}"
+          curl --fail --silent "http://127.0.0.1:4180/copilot/${asset#./}" > /tmp/copilotkit-bundle.js
+          grep -q 'CopilotKit' /tmp/copilotkit-bundle.js
+
+      - name: Audit connected desktop and phone workspaces in Chromium
+        shell: bash
+        env:
+          CHROME_DEBUG_PORT: 9230
+        run: |
+          set -euo pipefail
+          mkdir -p copilotkit-evidence
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "${browser}" ]]; then
+            echo 'No Chromium-compatible browser is available on the runner.'
+            exit 1
+          fi
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=9230 \
+            --user-data-dir=/tmp/harnesslab-copilotkit-chrome \
+            about:blank > /tmp/harnesslab-copilotkit-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${browser_pid}" "$(cat /tmp/harnesslab-copilotkit-runtime.pid)" "$(cat /tmp/harnesslab-copilotkit-pages.pid)" 2>/dev/null || true' EXIT
+
+          runtime='http%3A%2F%2F127.0.0.1%3A8790%2Fapi%2Fcopilotkit'
+          node scripts/verify-copilotkit-browser.mjs \
+            desktop 1440 1000 \
+            "http://127.0.0.1:4180/copilot/?runtime=${runtime}&sample=1" \
+            copilotkit-evidence connected
+          node scripts/verify-copilotkit-browser.mjs \
+            phone 390 844 \
+            "http://127.0.0.1:4180/copilot/?runtime=${runtime}&sample=1" \
+            copilotkit-evidence connected
+
+      - name: Upload CopilotKit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-copilotkit-foundation
+          path: copilotkit-evidence
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summarize the execution boundary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '### CopilotKit foundation passed'
+            echo
+            echo '- CopilotKit React and runtime packages built successfully.'
+            echo '- The custom AG-UI agent executed the existing deterministic HarnessLab engine.'
+            echo '- The result passed the authoritative HarnessLab schema validator.'
+            echo '- Desktop and phone browsers produced a structured result through the real runtime.'
+            echo '- Provider model calls: 0'
+            echo '- Server tools: 0'
+            echo '- External actions: 0'
+          } >> "$GITHUB_STEP_SUMMARY"
