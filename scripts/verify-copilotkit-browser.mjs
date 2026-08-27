@@ -134,8 +134,17 @@ try {
   await loaded;
 
   const readiness = await client.send('Runtime.evaluate', {
-    expression: `new Promise((resolve, reject) => {
+    expression: `new Promise((resolve) => {
       const started = Date.now();
+      const snapshot = (timeout = false) => ({
+        timeout,
+        audit: globalThis.__HARNESSLAB_COPILOTKIT_AUDIT__ || null,
+        mode: document.body.dataset.copilotkitMode || null,
+        rootReady: Boolean(document.querySelector('[data-copilotkit-root="ready"]')),
+        connectionMessage: document.querySelector('.connection-message')?.textContent?.trim() || null,
+        providerError: document.querySelector('.provider-error')?.textContent?.trim() || null,
+        resultState: document.querySelector('[data-copilotkit-result]')?.dataset.copilotkitResult || null
+      });
       const poll = () => {
         const root = document.querySelector('[data-copilotkit-root="ready"]');
         if (root) {
@@ -151,12 +160,12 @@ try {
           const resultReady = ${JSON.stringify(expectedMode)} === 'setup' || audit?.resultReady === true;
           if (correctMode && resultReady) {
             window.scrollTo(0, 0);
-            setTimeout(() => resolve(audit), 300);
+            setTimeout(() => resolve({ ...snapshot(false), audit }), 300);
             return;
           }
         }
         if (Date.now() - started > 30000) {
-          reject(new Error('HarnessLab Copilot did not reach the expected state.'));
+          resolve(snapshot(true));
           return;
         }
         setTimeout(poll, 100);
@@ -212,6 +221,7 @@ try {
   await writeFile(`${outputDirectory}/${name}.png`, Buffer.from(screenshot.data, 'base64'));
 
   const errors = [];
+  if (ready?.timeout) errors.push(`CopilotKit readiness timed out${ready.connectionMessage ? `: ${ready.connectionMessage}` : ''}`);
   if (diagnostics.viewport.width !== width || diagnostics.viewport.height !== height) errors.push('viewport dimensions do not match');
   if (diagnostics.pageOverflowX) errors.push(`page horizontally overflows: ${diagnostics.scrollWidth}px for ${width}px viewport`);
   if (diagnostics.bodyScroll.x !== 0) errors.push(`initial horizontal scroll is ${diagnostics.bodyScroll.x}`);
