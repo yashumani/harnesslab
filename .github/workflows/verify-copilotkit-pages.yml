@@ -1,0 +1,103 @@
+name: Verify CopilotKit Pages
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy HarnessLab to Pages
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-copilotkit-pages
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    name: CopilotKit Pages / live
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Verify public CopilotKit route and compiled assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://yashumani.github.io/harnesslab/copilot/'
+          for attempt in {1..40}; do
+            if curl --fail --silent --show-error --location --retry 2 --retry-delay 1 "${base}" > /tmp/copilotkit-live.html; then
+              break
+            fi
+            sleep 3
+          done
+          grep -q 'HarnessLab Copilot' /tmp/copilotkit-live.html
+          asset="$(grep -oE 'src="[^"]+\.js"' /tmp/copilotkit-live.html | head -1 | cut -d'"' -f2)"
+          css="$(grep -oE 'href="[^"]+\.css"' /tmp/copilotkit-live.html | head -1 | cut -d'"' -f2)"
+          test -n "${asset}"
+          test -n "${css}"
+          curl --fail --silent --show-error --location "${base}${asset#./}" > /tmp/copilotkit-live.js
+          curl --fail --silent --show-error --location "${base}${css#./}" > /tmp/copilotkit-live.css
+          grep -q 'CopilotKit' /tmp/copilotkit-live.js
+          grep -q 'copilot-shell' /tmp/copilotkit-live.css
+
+      - name: Audit the public setup experience in Chromium
+        shell: bash
+        env:
+          CHROME_DEBUG_PORT: 9231
+        run: |
+          set -euo pipefail
+          mkdir -p copilotkit-pages-evidence
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          test -n "${browser}"
+          "${browser}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=9231 \
+            --user-data-dir=/tmp/harnesslab-copilotkit-pages-chrome \
+            about:blank > /tmp/harnesslab-copilotkit-pages-chrome.log 2>&1 &
+          browser_pid=$!
+          trap 'kill "${browser_pid}" 2>/dev/null || true' EXIT
+          node scripts/verify-copilotkit-browser.mjs \
+            public-desktop 1440 1000 \
+            'https://yashumani.github.io/harnesslab/copilot/' \
+            copilotkit-pages-evidence setup
+          node scripts/verify-copilotkit-browser.mjs \
+            public-phone 390 844 \
+            'https://yashumani.github.io/harnesslab/copilot/' \
+            copilotkit-pages-evidence setup
+
+      - name: Upload public evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harnesslab-copilotkit-pages
+          path: copilotkit-pages-evidence
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Record public verification
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '### Public CopilotKit workspace verified'
+            echo
+            echo 'https://yashumani.github.io/harnesslab/copilot/'
+            echo
+            echo 'The static route, compiled bundle, responsive setup experience, and zero-credential runtime boundary are live.'
+          } >> "$GITHUB_STEP_SUMMARY"
