@@ -47,6 +47,7 @@ test('pins the CopilotKit v2 foundation and a reproducible Vite build', () => {
   assert.equal(pkg.dependencies['@ag-ui/client'], '0.0.57');
   assert.equal(pkg.dependencies.react, '18.3.1');
   assert.equal(pkg.dependencies['react-dom'], '18.3.1');
+  assert.equal(pkg.dependencies.zod, '4.4.3');
   assert.equal(pkg.devDependencies.vite, '8.2.2');
   assert.equal(pkg.devDependencies['@vitejs/plugin-react'], '6.1.0');
   assert.match(pkg.scripts['build:copilot'], /vite build/);
@@ -85,6 +86,11 @@ test('ships a self-hosted CopilotKit runtime with least-authority defaults', () 
   assert.match(runtime, /createCopilotExpressHandler/);
   assert.match(runtime, /harnessArchitect/);
   assert.match(runtime, /ORIGIN_NOT_ALLOWED/);
+  assert.match(runtime, /Access-Control-Allow-Origin/);
+  assert.match(runtime, /Access-Control-Allow-Credentials/);
+  assert.match(runtime, /Access-Control-Allow-Methods/);
+  assert.match(runtime, /request\.headers\['access-control-request-headers'\]/);
+  assert.match(runtime, /request\.method === 'OPTIONS'/);
   assert.match(runtime, /host = process\.env\.COPILOTKIT_HOST \|\| '127\.0\.0\.1'/);
   assert.match(runtime, /tools:\s*false/);
   assert.match(runtime, /externalActions:\s*false/);
@@ -118,6 +124,7 @@ test('validates the agent, browser, deployment, and live Pages contracts', () =>
   assert.match(browserVerifier, /Emulation\.setDeviceMetricsOverride/);
   assert.match(browserVerifier, /Page\.captureScreenshot/);
   assert.match(browserVerifier, /pageOverflowX/);
+  assert.match(browserVerifier, /readiness timed out/);
   assert.match(validator, /Validated the CopilotKit v2 foundation/);
   assert.match(copilotWorkflow, /npm run build:copilot/);
   assert.match(copilotWorkflow, /npm run smoke:copilotkit/);
