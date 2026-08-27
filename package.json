@@ -1,18 +1,36 @@
 {
   "name": "harnesslab",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Deploy-first AI agent harness builder and adaptive temporary-agent runtime.",
+  "description": "Deploy-first AI agent harness builder with a CopilotKit conversational workspace and bounded temporary-agent runtime.",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "validate": "node scripts/validate-static.mjs && node scripts/validate-taskzen.mjs && node scripts/validate-requirement-intelligence.mjs && node scripts/validate-learning-guide.mjs",
-    "check:syntax": "node --check apps/web/app.js && node --check apps/web/taskzen-shell.js && node --check apps/web/analysis-client.js && node --check apps/web/requirement-intelligence.js && node --check apps/web/requirement-intelligence-panel.js && node --check apps/web/critic-core.js && node --check apps/web/browser-critic-runtime.js && node --check apps/web/critic-client.js && node --check apps/web/critic-console.js && node --check apps/web/result-contract.js && node --check apps/web/temporary-worker-contract.js && node --check apps/web/learn-hub.js && node --check apps/web/guide/guide.js && node --check scripts/capture-ui-viewport.mjs && node --check scripts/capture-learning-guide-viewport.mjs && node --check scripts/verify-live-browser-critic.mjs && node --check scripts/validate-taskzen.mjs && node --check scripts/validate-requirement-intelligence.mjs && node --check scripts/validate-learning-guide.mjs && node --check services/gateway/app.mjs && node --check services/gateway/config.mjs && node --check services/gateway/errors.mjs && node --check services/gateway/provider-registry.mjs && node --check services/gateway/temporary-critic.mjs && node --check services/gateway/providers/architecture-guidance.mjs && node --check services/gateway/providers/deterministic.mjs && node --check services/gateway/providers/ollama.mjs && node --check services/gateway/providers/openrouter.mjs && node --check services/gateway/providers/provider-http.mjs && node --check services/gateway/server.mjs",
+    "validate": "node scripts/validate-static.mjs && node scripts/validate-taskzen.mjs && node scripts/validate-requirement-intelligence.mjs && node scripts/validate-learning-guide.mjs && node scripts/validate-copilotkit.mjs",
+    "check:syntax": "node --check apps/web/app.js && node --check apps/web/taskzen-shell.js && node --check apps/web/analysis-client.js && node --check apps/web/requirement-intelligence.js && node --check apps/web/requirement-intelligence-panel.js && node --check apps/web/critic-core.js && node --check apps/web/browser-critic-runtime.js && node --check apps/web/critic-client.js && node --check apps/web/critic-console.js && node --check apps/web/result-contract.js && node --check apps/web/temporary-worker-contract.js && node --check apps/web/learn-hub.js && node --check apps/web/copilotkit-launcher.js && node --check apps/web/guide/guide.js && node --check apps/copilotkit-web/src/harnesslab-agent.js && node --check services/copilotkit-runtime/server.mjs && node --check scripts/smoke-copilotkit-agent.mjs && node --check scripts/verify-copilotkit-browser.mjs && node --check scripts/capture-ui-viewport.mjs && node --check scripts/capture-learning-guide-viewport.mjs && node --check scripts/verify-live-browser-critic.mjs && node --check scripts/validate-taskzen.mjs && node --check scripts/validate-requirement-intelligence.mjs && node --check scripts/validate-learning-guide.mjs && node --check scripts/validate-copilotkit.mjs && node --check services/gateway/app.mjs && node --check services/gateway/config.mjs && node --check services/gateway/errors.mjs && node --check services/gateway/provider-registry.mjs && node --check services/gateway/temporary-critic.mjs && node --check services/gateway/providers/architecture-guidance.mjs && node --check services/gateway/providers/deterministic.mjs && node --check services/gateway/providers/ollama.mjs && node --check services/gateway/providers/openrouter.mjs && node --check services/gateway/providers/provider-http.mjs && node --check services/gateway/server.mjs",
     "check": "npm run check:syntax && npm run test && npm run validate",
+    "build:copilot": "vite build --config vite.copilotkit.config.mjs",
+    "dev:copilot": "vite --config vite.copilotkit.config.mjs --host 127.0.0.1",
+    "copilotkit:runtime": "node services/copilotkit-runtime/server.mjs",
+    "smoke:copilotkit": "node scripts/smoke-copilotkit-agent.mjs",
     "serve": "python3 -m http.server 4173 --directory apps/web",
     "gateway": "node services/gateway/server.mjs"
   },
+  "dependencies": {
+    "@ag-ui/client": "0.0.57",
+    "@copilotkit/react-core": "1.69.2",
+    "@copilotkit/runtime": "1.69.2",
+    "express": "4.21.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "rxjs": "7.8.1",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.1.0",
+    "vite": "8.2.2"
+  },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   }
 }
