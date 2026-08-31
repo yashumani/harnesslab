@@ -25,10 +25,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           package-manager-cache: false
@@ -82,7 +82,7 @@ jobs:
             browser-critic-evidence/result.json
 
       - name: Upload browser critic evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: harnesslab-browser-critic-integration
           path: browser-critic-evidence

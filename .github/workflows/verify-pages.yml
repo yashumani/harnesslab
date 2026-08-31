@@ -24,12 +24,12 @@ jobs:
     timeout-minutes: 12
     steps:
       - name: Check out the deployed release
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           package-manager-cache: false
@@ -217,7 +217,7 @@ jobs:
             live-critic-verification/result.json
 
       - name: Upload live critic execution evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: harnesslab-live-browser-critic-verification
           path: live-critic-verification
